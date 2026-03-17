@@ -636,6 +636,12 @@ msgstr ""
 msgid "Cannot delete the last admin user."
 msgstr "Không thể xóa người dùng quản trị cuối cùng."
 
+#. js-lingui-id: W3Ik7m
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-validator.service.ts
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-validator.service.ts
+msgid "Cannot delete the only view for this object"
+msgstr ""
+
 #. js-lingui-id: mWk3X+
 #: src/engine/metadata-modules/flat-field-metadata/utils/handle-index-changes-during-field-update.util.ts
 msgid "Cannot delete unique index that have not been created by the workspace custom application"
@@ -1170,6 +1176,11 @@ msgstr ""
 msgid "Empty field permissions are not allowed."
 msgstr "Không cho phép quyền trường trống."
 
+#. js-lingui-id: ArAFBo
+#: src/engine/core-modules/auth/auth.exception.ts
+msgid "Enterprise validity token is not valid."
+msgstr ""
+
 #. js-lingui-id: qpXqpa
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-runner/exceptions/workspace-migration-action-execution.exception.ts
 #: src/engine/core-modules/application/application.exception.ts
@@ -1197,14 +1208,14 @@ msgstr "Lỗi"
 msgid "Exactly one of \"groups\" or \"fields\" must be provided"
 msgstr ""
 
-#. js-lingui-id: ksMwKk
+#. js-lingui-id: gyqLlt
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-command-menu-item-validator.service.ts
-msgid "Exactly one of workflow version or front component is required"
+msgid "Exactly one of workflow version, front component or engine component key is required"
 msgstr ""
 
-#. js-lingui-id: yX0axn
+#. js-lingui-id: ucm3bq
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-command-menu-item-validator.service.ts
-msgid "Exactly one of workflowVersionId or frontComponentUniversalIdentifier is required"
+msgid "Exactly one of workflowVersionId, frontComponentUniversalIdentifier or engineComponentKey is required"
 msgstr ""
 
 #. js-lingui-id: AiFXmG
@@ -1532,16 +1543,10 @@ msgstr ""
 msgid "Flow"
 msgstr ""
 
-#. js-lingui-id: 9110hD
+#. js-lingui-id: Fzrzfe
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "Folder name is required and cannot be empty"
-msgstr ""
-
-#. js-lingui-id: 2WhlK8
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "Folder name is required when creating a folder"
+msgid "Folder name is required"
 msgstr ""
 
 #. js-lingui-id: eWmJYU
@@ -1890,6 +1895,11 @@ msgstr "Địa chỉ email không hợp lệ."
 #. js-lingui-id: Lq9KTr
 #: src/modules/blocklist/blocklist-validation-manager/services/blocklist-validation.service.ts
 msgid "Invalid email or domain."
+msgstr ""
+
+#. js-lingui-id: pOHI+b
+#: src/engine/core-modules/enterprise/enterprise.exception.ts
+msgid "Invalid enterprise key."
 msgstr ""
 
 #. js-lingui-id: YtFgT4
@@ -2306,7 +2316,7 @@ msgid "Invalid value for position: \"{inspectedValue}\""
 msgstr ""
 
 #. js-lingui-id: Sf+6YJ
-#: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-rich-text-v2-field-or-throw.util.ts
+#: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-rich-text-field-or-throw.util.ts
 msgid "Invalid value for rich text."
 msgstr ""
 
@@ -2416,6 +2426,11 @@ msgstr "Đầu vào trình kích hoạt quy trình làm việc không hợp lệ
 #: src/modules/workflow/workflow-trigger/exceptions/workflow-trigger.exception.ts
 msgid "Invalid workflow version."
 msgstr "Phiên bản quy trình làm việc không hợp lệ."
+
+#. js-lingui-id: 1bOGPq
+#: src/engine/core-modules/enterprise/enterprise.exception.ts
+msgid "IS_CONFIG_VARIABLES_IN_DB_ENABLED is false on your server. Please add ENTERPRISE_KEY to your .env file manually."
+msgstr ""
 
 #. js-lingui-id: rjyWPb
 #: src/engine/api/graphql/graphql-query-runner/group-by/resolvers/utils/format-result-with-group-by-dimension-values.util.ts
@@ -2575,6 +2590,12 @@ msgstr ""
 #. js-lingui-id: qBrKIA
 #: src/engine/metadata-modules/flat-page-layout-widget/validators/utils/validate-bar-chart-configuration.util.ts
 msgid "Layout is required for bar chart widget \"{widgetTitle}\""
+msgstr ""
+
+#. js-lingui-id: oDC0sf
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
+msgid "link is required for LINK type"
 msgstr ""
 
 #. js-lingui-id: V5AXjr
@@ -2780,12 +2801,6 @@ msgstr "Tên không đồng bộ với nhãn"
 msgid "Navigation menu item cannot be its own parent"
 msgstr ""
 
-#. js-lingui-id: xSvMwa
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "Navigation menu item cannot be multiple types simultaneously"
-msgstr ""
-
 #. js-lingui-id: t38VAr
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
@@ -2795,12 +2810,6 @@ msgstr ""
 #. js-lingui-id: E+iJnK
 #: src/engine/metadata-modules/navigation-menu-item/navigation-menu-item.exception.ts
 msgid "Navigation menu item hierarchy exceeds maximum depth."
-msgstr ""
-
-#. js-lingui-id: JePSNf
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "Navigation menu item must be either a folder (with name), a view link (with viewId), a record link (with targetRecordId and targetObjectMetadataId), or an external link (with link)"
 msgstr ""
 
 #. js-lingui-id: s+CGNO
@@ -2814,6 +2823,12 @@ msgstr ""
 #. js-lingui-id: p5qcyl
 #: src/engine/metadata-modules/navigation-menu-item/navigation-menu-item.exception.ts
 msgid "Navigation menu item not found."
+msgstr ""
+
+#. js-lingui-id: Ii6d/e
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
+msgid "Navigation menu item type is required"
 msgstr ""
 
 #. js-lingui-id: TYhxR+
@@ -3835,8 +3850,12 @@ msgstr ""
 
 #. js-lingui-id: sndTPB
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-object-metadata-validator.service.ts
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-object-metadata-validator.service.ts
 msgid "System objects cannot be updated"
+msgstr ""
+
+#. js-lingui-id: aF4zgq
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-object-metadata-validator.service.ts
+msgid "System objects cannot be updated directly. Use standardOverrides for cosmetic changes."
 msgstr ""
 
 #. js-lingui-id: 8UWeLh
@@ -3870,16 +3889,16 @@ msgstr ""
 msgid "Target URL is required"
 msgstr ""
 
-#. js-lingui-id: 9Q/KBa
+#. js-lingui-id: L3vVWc
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "targetObjectMetadataId is required when targetRecordId is provided"
+msgid "targetObjectMetadataId is required for OBJECT type"
 msgstr ""
 
-#. js-lingui-id: vdVtAE
+#. js-lingui-id: NGynR3
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "targetRecordId is required when targetObjectMetadataId is provided"
+msgid "targetRecordId and targetObjectMetadataId are required for RECORD type"
 msgstr ""
 
 #. js-lingui-id: GtycJ/
@@ -4013,11 +4032,6 @@ msgstr "Không thể tìm thấy vai trò bạn đang cố gắng sửa đổi. 
 #: src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection-validator.service.ts
 msgid "The server address you entered is not allowed. Please use a public server address."
 msgstr ""
-
-#. js-lingui-id: H1tAJD
-#: src/engine/metadata-modules/flat-object-metadata/validators/utils/validate-flat-object-metadata-label.util.ts
-msgid "The singular and plural labels cannot be the same for an object"
-msgstr "Nhãn số ít và số nhiều không thể giống nhau cho một đối tượng"
 
 #. js-lingui-id: FOEWHl
 #: src/engine/metadata-modules/flat-object-metadata/validators/utils/validate-flat-object-metadata-name.util.ts
@@ -4803,10 +4817,10 @@ msgstr "Không tìm thấy chế độ xem cần cập nhật"
 msgid "View with same universal identifier already exists"
 msgstr ""
 
-#. js-lingui-id: qTtxHh
+#. js-lingui-id: 14WoDD
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-navigation-menu-item-validator.service.ts
-msgid "viewId cannot be provided together with targetRecordId or targetObjectMetadataId"
+msgid "viewId is required for VIEW type"
 msgstr ""
 
 #. js-lingui-id: l88nXn

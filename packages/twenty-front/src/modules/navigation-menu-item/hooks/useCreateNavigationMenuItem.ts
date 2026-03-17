@@ -1,20 +1,24 @@
+import { NavigationMenuItemType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { useCreateNavigationMenuItemMutation } from '~/generated-metadata/graphql';
+import { useMutation } from '@apollo/client/react';
+import { CreateNavigationMenuItemDocument } from '~/generated-metadata/graphql';
 
-import { usePrefetchedNavigationMenuItemsData } from '@/navigation-menu-item/hooks/usePrefetchedNavigationMenuItemsData';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
+import { useNavigationMenuItemsData } from '@/navigation-menu-item/hooks/useNavigationMenuItemsData';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 
 export const useCreateNavigationMenuItem = () => {
   const { navigationMenuItems, currentWorkspaceMemberId } =
-    usePrefetchedNavigationMenuItemsData();
-  const objectMetadataItems = useAtomStateValue(objectMetadataItemsState);
+    useNavigationMenuItemsData();
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
 
-  const [createNavigationMenuItemMutation] =
-    useCreateNavigationMenuItemMutation({
+  const [createNavigationMenuItemMutation] = useMutation(
+    CreateNavigationMenuItemDocument,
+    {
       refetchQueries: ['FindManyNavigationMenuItems'],
-    });
+    },
+  );
 
   const createNavigationMenuItem = async (
     targetRecord: ObjectRecord,
@@ -39,6 +43,7 @@ export const useCreateNavigationMenuItem = () => {
       await createNavigationMenuItemMutation({
         variables: {
           input: {
+            type: NavigationMenuItemType.VIEW,
             viewId: targetRecord.id,
             userWorkspaceId: currentWorkspaceMemberId,
             folderId,
@@ -72,6 +77,7 @@ export const useCreateNavigationMenuItem = () => {
       await createNavigationMenuItemMutation({
         variables: {
           input: {
+            type: NavigationMenuItemType.RECORD,
             targetRecordId: targetRecord.id,
             targetObjectMetadataId: objectMetadataItem.id,
             userWorkspaceId: currentWorkspaceMemberId,

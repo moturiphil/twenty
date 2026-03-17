@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should match snapshot 1`] = `
 {
@@ -30,6 +30,7 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
       "availabilityType",
       "conditionalAvailabilityExpression",
       "availabilityObjectMetadataUniversalIdentifier",
+      "engineComponentKey",
     ],
     "propertiesToStringify": [],
   },
@@ -104,6 +105,7 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
   },
   "navigationMenuItem": {
     "propertiesToCompare": [
+      "type",
       "position",
       "folderUniversalIdentifier",
       "name",
@@ -115,6 +117,7 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
   },
   "objectMetadata": {
     "propertiesToCompare": [
+      "color",
       "description",
       "icon",
       "isActive",
@@ -145,8 +148,12 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
       "title",
       "position",
       "deletedAt",
+      "icon",
+      "overrides",
     ],
-    "propertiesToStringify": [],
+    "propertiesToStringify": [
+      "overrides",
+    ],
   },
   "pageLayoutWidget": {
     "propertiesToCompare": [
@@ -157,11 +164,15 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
       "position",
       "universalConfiguration",
       "deletedAt",
+      "conditionalDisplay",
+      "overrides",
     ],
     "propertiesToStringify": [
       "gridPosition",
       "position",
       "universalConfiguration",
+      "conditionalDisplay",
+      "overrides",
     ],
   },
   "role": {
@@ -256,8 +267,11 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
       "aggregateOperation",
       "viewFieldGroupUniversalIdentifier",
       "deletedAt",
+      "universalOverrides",
     ],
-    "propertiesToStringify": [],
+    "propertiesToStringify": [
+      "universalOverrides",
+    ],
   },
   "viewFieldGroup": {
     "propertiesToCompare": [
@@ -265,8 +279,11 @@ exports[`ALL_UNIVERSAL_FLAT_ENTITY_PROPERTIES_TO_COMPARE_AND_STRINGIFY should ma
       "position",
       "isVisible",
       "deletedAt",
+      "overrides",
     ],
-    "propertiesToStringify": [],
+    "propertiesToStringify": [
+      "overrides",
+    ],
   },
   "viewFilter": {
     "propertiesToCompare": [

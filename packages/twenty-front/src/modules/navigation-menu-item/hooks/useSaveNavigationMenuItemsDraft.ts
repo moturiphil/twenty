@@ -1,7 +1,9 @@
 import { useCallback } from 'react';
+import { NavigationMenuItemType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-import { useCreateNavigationMenuItemMutation } from '~/generated-metadata/graphql';
+import { useMutation } from '@apollo/client/react';
+import { CreateNavigationMenuItemDocument } from '~/generated-metadata/graphql';
 
 import { useDeleteNavigationMenuItem } from '@/navigation-menu-item/hooks/useDeleteNavigationMenuItem';
 import { useUpdateNavigationMenuItem } from '@/navigation-menu-item/hooks/useUpdateNavigationMenuItem';
@@ -11,27 +13,62 @@ import { filterWorkspaceNavigationMenuItems } from '@/navigation-menu-item/utils
 import { isNavigationMenuItemFolder } from '@/navigation-menu-item/utils/isNavigationMenuItemFolder';
 import { isNavigationMenuItemLink } from '@/navigation-menu-item/utils/isNavigationMenuItemLink';
 import { orderFoldersForCreation } from '@/navigation-menu-item/utils/orderFoldersForCreation';
-import { prefetchNavigationMenuItemsState } from '@/prefetch/states/prefetchNavigationMenuItemsState';
+import { navigationMenuItemsSelector } from '@/navigation-menu-item/states/navigationMenuItemsSelector';
+import { useUpdateOneObjectMetadataItem } from '@/object-metadata/hooks/useUpdateOneObjectMetadataItem';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { useStore } from 'jotai';
 
 export const useSaveNavigationMenuItemsDraft = () => {
   const { updateNavigationMenuItem } = useUpdateNavigationMenuItem();
   const { deleteNavigationMenuItem } = useDeleteNavigationMenuItem();
-  const [createNavigationMenuItemMutation] =
-    useCreateNavigationMenuItemMutation({
+  const [createNavigationMenuItemMutation] = useMutation(
+    CreateNavigationMenuItemDocument,
+    {
       refetchQueries: ['FindManyNavigationMenuItems'],
-    });
+    },
+  );
+  const { updateOneObjectMetadataItem } = useUpdateOneObjectMetadataItem();
 
   const store = useStore();
 
   const saveDraft = useCallback(async () => {
     const draft = store.get(navigationMenuItemsDraftState.atom);
-    const prefetch = store.get(prefetchNavigationMenuItemsState.atom);
+    const currentItems = store.get(navigationMenuItemsSelector.atom);
 
     if (!draft) return;
 
-    const workspacePrefetch = filterWorkspaceNavigationMenuItems(prefetch);
-    const topLevelWorkspace = workspacePrefetch.filter(
+    const objectMetadataItems = store.get(objectMetadataItemsSelector.atom);
+
+    for (const draftItem of draft) {
+      if (draftItem.type !== NavigationMenuItemType.OBJECT) {
+        continue;
+      }
+      if (!isDefined(draftItem.targetObjectMetadataId)) {
+        continue;
+      }
+      if (!isDefined(draftItem.color)) {
+        continue;
+      }
+
+      const objectMetadataItem = objectMetadataItems.find(
+        (item) => item.id === draftItem.targetObjectMetadataId,
+      );
+
+      if (!isDefined(objectMetadataItem)) {
+        continue;
+      }
+      if (objectMetadataItem.color === draftItem.color) {
+        continue;
+      }
+
+      await updateOneObjectMetadataItem({
+        idToUpdate: draftItem.targetObjectMetadataId,
+        updatePayload: { color: draftItem.color },
+      });
+    }
+
+    const workspaceItems = filterWorkspaceNavigationMenuItems(currentItems);
+    const topLevelWorkspace = workspaceItems.filter(
       (item) => !isDefined(item.folderId),
     );
     const draftIds = new Set(draft.map((i) => i.id));
@@ -44,7 +81,7 @@ export const useSaveNavigationMenuItemsDraft = () => {
         .filter(isNavigationMenuItemFolder)
         .map((item) => item.id),
     );
-    const folderChildrenToDelete = prefetch.filter(
+    const folderChildrenToDelete = currentItems.filter(
       (item) =>
         isDefined(item.folderId) && folderIdsToDelete.has(item.folderId),
     );
@@ -56,13 +93,11 @@ export const useSaveNavigationMenuItemsDraft = () => {
       await deleteNavigationMenuItem(item.id);
     }
 
-    const prefetchIds = new Set(workspacePrefetch.map((i) => i.id));
-    const workspacePrefetchById = new Map(
-      workspacePrefetch.map((i) => [i.id, i]),
-    );
-    const idsToCreate = draft.filter((item) => !prefetchIds.has(item.id));
+    const currentIds = new Set(workspaceItems.map((i) => i.id));
+    const workspaceItemsById = new Map(workspaceItems.map((i) => [i.id, i]));
+    const idsToCreate = draft.filter((item) => !currentIds.has(item.id));
     const idsToRecreate = draft.filter((item) => {
-      const original = workspacePrefetchById.get(item.id);
+      const original = workspaceItemsById.get(item.id);
       if (!original) return false;
       return (
         original.viewId !== item.viewId ||
@@ -85,10 +120,7 @@ export const useSaveNavigationMenuItemsDraft = () => {
     const resolveFolderId = (draftFolderId: string): string =>
       createdFolderIdByDraftId.get(draftFolderId) ?? draftFolderId;
 
-    const orderedFolders = orderFoldersForCreation(
-      foldersToCreate,
-      prefetchIds,
-    );
+    const orderedFolders = orderFoldersForCreation(foldersToCreate, currentIds);
     for (const draftItem of orderedFolders) {
       const input = buildCreateNavigationMenuItemInput(
         draftItem,
@@ -117,7 +149,7 @@ export const useSaveNavigationMenuItemsDraft = () => {
     for (const draftItem of draft) {
       if (idsToRecreateSet.has(draftItem.id)) continue;
 
-      const original = workspacePrefetchById.get(draftItem.id);
+      const original = workspaceItemsById.get(draftItem.id);
       if (!original) continue;
 
       const positionChanged = original.position !== draftItem.position;
@@ -133,13 +165,17 @@ export const useSaveNavigationMenuItemsDraft = () => {
       const iconChanged =
         isNavigationMenuItemFolder(draftItem) &&
         (original.icon ?? null) !== (draftItem.icon ?? null);
+      const colorChanged =
+        isNavigationMenuItemFolder(draftItem) &&
+        (original.color ?? null) !== (draftItem.color ?? null);
 
       if (
         positionChanged ||
         folderIdChanged ||
         nameChanged ||
         linkChanged ||
-        iconChanged
+        iconChanged ||
+        colorChanged
       ) {
         const updateInput: {
           id: string;
@@ -148,6 +184,7 @@ export const useSaveNavigationMenuItemsDraft = () => {
           name?: string;
           link?: string | null;
           icon?: string | null;
+          color?: string | null;
         } = { id: draftItem.id };
 
         if (positionChanged) {
@@ -176,6 +213,9 @@ export const useSaveNavigationMenuItemsDraft = () => {
         if (iconChanged && isNavigationMenuItemFolder(draftItem)) {
           updateInput.icon = draftItem.icon ?? null;
         }
+        if (colorChanged) {
+          updateInput.color = draftItem.color ?? null;
+        }
 
         await updateNavigationMenuItem(updateInput);
       }
@@ -184,6 +224,7 @@ export const useSaveNavigationMenuItemsDraft = () => {
     updateNavigationMenuItem,
     deleteNavigationMenuItem,
     createNavigationMenuItemMutation,
+    updateOneObjectMetadataItem,
     store,
   ]);
 

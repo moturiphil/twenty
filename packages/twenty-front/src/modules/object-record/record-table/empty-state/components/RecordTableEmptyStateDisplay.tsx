@@ -22,10 +22,6 @@ import {
 const StyledEmptyPlaceholderOuterContainer = styled.div`
   height: 100%;
   width: 100%;
-
-  > * {
-    align-items: flex-start;
-  }
 `;
 
 type RecordTableEmptyStateDisplayButtonComponentProps = {
@@ -89,7 +85,7 @@ export const RecordTableEmptyStateDisplay = (
         {'buttonTitle' in props &&
           !isReadOnly &&
           !hasAnySoftDeleteFilterOnView &&
-          !isRecordTableCreateDisabled(objectMetadataItem.nameSingular) && (
+          !isRecordTableCreateDisabled(objectMetadataItem) && (
             <Button
               Icon={props.ButtonIcon}
               title={props.buttonTitle}

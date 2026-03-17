@@ -16,6 +16,7 @@ import { getNavigationMenuItemBaseFile } from '@/cli/utilities/entity/entity-nav
 import { getObjectBaseFile } from '@/cli/utilities/entity/entity-object-template';
 import { getPageLayoutBaseFile } from '@/cli/utilities/entity/entity-page-layout-template';
 import { getRoleBaseFile } from '@/cli/utilities/entity/entity-role-template';
+import { getAgentBaseFile } from '@/cli/utilities/entity/entity-agent-template';
 import { getSkillBaseFile } from '@/cli/utilities/entity/entity-skill-template';
 import { getViewBaseFile } from '@/cli/utilities/entity/entity-view-template';
 import { ensureDir, pathExists } from '@/cli/utilities/file/fs-utils';
@@ -144,6 +145,16 @@ export class EntityAddCommand {
         return { name, file };
       }
 
+      case SyncableEntity.Agent: {
+        const name = await this.getEntityName(entity);
+
+        const file = getAgentBaseFile({
+          name,
+        });
+
+        return { name, file };
+      }
+
       case SyncableEntity.View: {
         const entityData = await this.getViewData();
 
@@ -249,7 +260,8 @@ export class EntityAddCommand {
 
     const navFile = getNavigationMenuItemBaseFile({
       name: objectName,
-      viewUniversalIdentifier,
+      type: 'OBJECT',
+      targetObjectUniversalIdentifier: this.lastObjectUniversalIdentifier,
     });
 
     const navFolderPath = customPath

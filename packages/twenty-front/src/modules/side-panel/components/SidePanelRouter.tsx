@@ -1,5 +1,6 @@
-import { ActionMenuContextProvider } from '@/action-menu/contexts/ActionMenuContextProvider';
+import { CommandMenuContextProvider } from '@/command-menu-item/contexts/CommandMenuContextProvider';
 import { SidePanelContainer } from '@/side-panel/components/SidePanelContainer';
+import { SidePanelSubPageRouter } from '@/side-panel/components/SidePanelSubPageRouter';
 import { SidePanelTopBar } from '@/side-panel/components/SidePanelTopBar';
 import { SIDE_PANEL_PAGES_CONFIG } from '@/side-panel/constants/SidePanelPagesConfig';
 import { SidePanelPageComponentInstanceContext } from '@/side-panel/states/contexts/SidePanelPageComponentInstanceContext';
@@ -51,13 +52,15 @@ export const SidePanelRouter = () => {
           <SidePanelTopBar />
         </motion.div>
         <StyledSidePanelContent>
-          <ActionMenuContextProvider
+          <CommandMenuContextProvider
             isInSidePanel={true}
             displayType="listItem"
-            actionMenuType="command-menu"
+            containerType="command-menu-list"
           >
-            {sidePanelPageComponent}
-          </ActionMenuContextProvider>
+            <SidePanelSubPageRouter>
+              {sidePanelPageComponent}
+            </SidePanelSubPageRouter>
+          </CommandMenuContextProvider>
         </StyledSidePanelContent>
       </SidePanelPageComponentInstanceContext.Provider>
     </SidePanelContainer>

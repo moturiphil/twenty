@@ -7,7 +7,6 @@
  *                              |___/
  */
 
-export { ActionViewType } from './ActionViewType';
 export type { AllowedAddressSubField } from './AddressFieldsType';
 export { ALLOWED_ADDRESS_SUBFIELDS } from './AddressFieldsType';
 export { AggregateOperations } from './AggregateOperations';
@@ -16,6 +15,8 @@ export { AppPath } from './AppPath';
 export type { Arrayable } from './Arrayable';
 export type { ArraySortDirection } from './ArraySortDirection';
 export type { CommandMenuContextApi } from './CommandMenuContextApi';
+export { CommandMenuContextApiPageType } from './CommandMenuContextApiPageType';
+export { CommandMenuItemViewType } from './CommandMenuItemViewType';
 export type { ActorMetadata } from './composite-types/actor.composite-type';
 export {
   FieldActorSource,
@@ -45,11 +46,11 @@ export type {
   PhonesMetadata,
 } from './composite-types/phones.composite-type';
 export { phonesCompositeType } from './composite-types/phones.composite-type';
-export type { RichTextV2Metadata } from './composite-types/rich-text-v2.composite-type';
+export type { RichTextMetadata } from './composite-types/rich-text.composite-type';
 export {
-  richTextV2CompositeType,
-  richTextV2ValueSchema,
-} from './composite-types/rich-text-v2.composite-type';
+  richTextCompositeType,
+  richTextValueSchema,
+} from './composite-types/rich-text.composite-type';
 export type { CompositeFieldSubFieldName } from './CompositeFieldSubFieldNameType';
 export type { ConfigVariableValue } from './ConfigVariableValue';
 export { ConnectedAccountProvider } from './ConnectedAccountProvider';
@@ -70,7 +71,7 @@ export type {
   FieldMetadataDefaultValueFunctionNames,
   FieldMetadataDefaultValueUuidFunction,
   FieldMetadataDefaultValueNowFunction,
-  FieldMetadataDefaultValueRichTextV2,
+  FieldMetadataDefaultValueRichText,
   FieldMetadataDefaultValueCurrency,
   FieldMetadataDefaultValueFullName,
   FieldMetadataDefaultValueAddress,
@@ -127,6 +128,7 @@ export { MessageParticipantRole } from './MessageParticipantRole';
 export type { MetadataGqlOperationSignature } from './MetadataGqlOperationSignature';
 export type { ModifiedProperties } from './ModifiedProperties';
 export type { NavigateOptions } from './NavigateOptions';
+export { NavigationMenuItemType } from './NavigationMenuItemType';
 export type { NonNullableRequired } from './NonNullableRequired';
 export type { Nullable } from './Nullable';
 export type { NullablePartial } from './NullablePartial';
@@ -216,8 +218,8 @@ export type {
   ArrayFilter,
   RawJsonFilter,
   FilesFilter,
-  RichTextV2LeafFilter,
-  RichTextV2Filter,
+  RichTextLeafFilter,
+  RichTextFilter,
   TSVectorFilter,
   LeafFilter,
   AndObjectRecordFilter,

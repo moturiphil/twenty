@@ -12,13 +12,9 @@ type SidePanelSystemObjectPickerSubViewProps = {
   systemObjects: ObjectMetadataItem[];
   searchValue: string;
   onSearchChange: (value: string) => void;
-  onBack: () => void;
   isViewItem: boolean;
   onSelectObjectForViewEdit?: (objectMetadataItem: ObjectMetadataItem) => void;
-  onChangeObject: (
-    objectMetadataItem: ObjectMetadataItem,
-    defaultViewId: string,
-  ) => void;
+  onChangeObject: (objectMetadataItem: ObjectMetadataItem) => void;
   objectMenuItemVariant?: 'add' | 'edit';
   emptyNoResultsText?: string;
   disableDrag?: boolean;
@@ -28,7 +24,6 @@ export const SidePanelSystemObjectPickerSubView = ({
   systemObjects,
   searchValue,
   onSearchChange,
-  onBack,
   isViewItem,
   onSelectObjectForViewEdit,
   onChangeObject,
@@ -69,8 +64,6 @@ export const SidePanelSystemObjectPickerSubView = ({
 
   return (
     <SidePanelSubViewWithSearch
-      backBarTitle={t`System objects`}
-      onBack={onBack}
       searchPlaceholder={t`Search a system object...`}
       searchValue={searchValue}
       onSearchChange={onSearchChange}

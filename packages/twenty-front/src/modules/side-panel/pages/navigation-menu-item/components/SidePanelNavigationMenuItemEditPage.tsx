@@ -1,29 +1,27 @@
 import { CommandMenuItem } from '@/command-menu/components/CommandMenuItem';
-import { NavigationMenuItemType } from '@/navigation-menu-item/constants/NavigationMenuItemType';
+import { NavigationMenuItemType } from 'twenty-shared/types';
 import { useNavigationMenuItemsDraftState } from '@/navigation-menu-item/hooks/useNavigationMenuItemsDraftState';
 import { useOpenAddItemToFolderPage } from '@/navigation-menu-item/hooks/useOpenAddItemToFolderPage';
 import { useSelectedNavigationMenuItemEditItem } from '@/navigation-menu-item/hooks/useSelectedNavigationMenuItemEditItem';
 import { useSelectedNavigationMenuItemEditItemLabel } from '@/navigation-menu-item/hooks/useSelectedNavigationMenuItemEditItemLabel';
-import { useSelectedNavigationMenuItemEditItemObjectMetadata } from '@/navigation-menu-item/hooks/useSelectedNavigationMenuItemEditItemObjectMetadata';
 import { useUpdateLinkInDraft } from '@/navigation-menu-item/hooks/useUpdateLinkInDraft';
 import { selectedNavigationMenuItemInEditModeState } from '@/navigation-menu-item/states/selectedNavigationMenuItemInEditModeState';
 import { parseThemeColor } from '@/navigation-menu-item/utils/parseThemeColor';
 import { SidePanelGroup } from '@/side-panel/components/SidePanelGroup';
 import { SidePanelList } from '@/side-panel/components/SidePanelList';
+import { useSidePanelSubPageHistory } from '@/side-panel/hooks/useSidePanelSubPageHistory';
 import { SidePanelEditColorOption } from '@/side-panel/pages/navigation-menu-item/components/SidePanelEditColorOption';
-import { SidePanelEditFolderPickerSubView } from '@/side-panel/pages/navigation-menu-item/components/SidePanelEditFolderPickerSubView';
 import { SidePanelEditLinkItemView } from '@/side-panel/pages/navigation-menu-item/components/SidePanelEditLinkItemView';
 import { SidePanelEditObjectViewBase } from '@/side-panel/pages/navigation-menu-item/components/SidePanelEditObjectViewBase';
 import { SidePanelEditOrganizeActions } from '@/side-panel/pages/navigation-menu-item/components/SidePanelEditOrganizeActions';
 import { SidePanelEditOwnerSection } from '@/side-panel/pages/navigation-menu-item/components/SidePanelEditOwnerSection';
 import { useNavigationMenuItemEditOrganizeActions } from '@/side-panel/pages/navigation-menu-item/hooks/useNavigationMenuItemEditOrganizeActions';
 import { getOrganizeActionsSelectableItemIds } from '@/side-panel/pages/navigation-menu-item/utils/getOrganizeActionsSelectableItemIds';
+import { SidePanelSubPages } from '@/side-panel/types/SidePanelSubPages';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
-import { ViewKey } from '@/views/types/ViewKey';
 import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { IconPlus } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -47,12 +45,11 @@ export const SidePanelNavigationMenuItemEditPage = () => {
   );
   const { selectedItemLabel } = useSelectedNavigationMenuItemEditItemLabel();
   const { selectedItem } = useSelectedNavigationMenuItemEditItem();
-  const { selectedItemObjectMetadata } =
-    useSelectedNavigationMenuItemEditItemObjectMetadata();
-  const selectedItemType = selectedItem?.itemType ?? null;
+  const selectedItemType = selectedItem?.type ?? null;
 
-  const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
-  const openFolderPicker = () => setIsFolderPickerOpen(true);
+  const { navigateToSidePanelSubPage } = useSidePanelSubPageHistory();
+  const openFolderPicker = () =>
+    navigateToSidePanelSubPage(SidePanelSubPages.EditFolderPicker);
 
   const {
     canMoveUp,
@@ -69,10 +66,7 @@ export const SidePanelNavigationMenuItemEditPage = () => {
   const { workspaceNavigationMenuItems } = useNavigationMenuItemsDraftState();
 
   const handleAddItemToFolder = () => {
-    if (
-      !selectedItem ||
-      selectedItem.itemType !== NavigationMenuItemType.FOLDER
-    ) {
+    if (!selectedItem || selectedItem.type !== NavigationMenuItemType.FOLDER) {
       return;
     }
     const folderItemCount = workspaceNavigationMenuItems.filter(
@@ -95,17 +89,8 @@ export const SidePanelNavigationMenuItemEditPage = () => {
     );
   }
 
-  if (isFolderPickerOpen) {
-    return (
-      <SidePanelEditFolderPickerSubView
-        onBack={() => setIsFolderPickerOpen(false)}
-      />
-    );
-  }
-
   switch (selectedItemType) {
-    case NavigationMenuItemType.VIEW:
-      if (!selectedItemObjectMetadata) return null;
+    case NavigationMenuItemType.OBJECT:
       return (
         <SidePanelEditObjectViewBase
           onOpenFolderPicker={openFolderPicker}
@@ -116,17 +101,27 @@ export const SidePanelNavigationMenuItemEditPage = () => {
           onRemove={onRemove}
           onAddBefore={onAddBefore}
           onAddAfter={onAddAfter}
-          showColorOption={
-            selectedItem &&
-            'viewKey' in selectedItem &&
-            selectedItem.viewKey === ViewKey.Index
-          }
+          showColorOption={isDefined(selectedItem)}
+          selectedItem={selectedItem}
+        />
+      );
+    case NavigationMenuItemType.VIEW:
+      return (
+        <SidePanelEditObjectViewBase
+          onOpenFolderPicker={openFolderPicker}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onRemove={onRemove}
+          onAddBefore={onAddBefore}
+          onAddAfter={onAddAfter}
         />
       );
     case NavigationMenuItemType.LINK:
       if (
         isDefined(selectedItem) &&
-        selectedItem.itemType === NavigationMenuItemType.LINK
+        selectedItem.type === NavigationMenuItemType.LINK
       ) {
         return (
           <SidePanelEditLinkItemView
@@ -194,14 +189,6 @@ export const SidePanelNavigationMenuItemEditPage = () => {
           commandGroups={[]}
           selectableItemIds={getOrganizeActionsSelectableItemIds(true)}
         >
-          {selectedItem && (
-            <SidePanelGroup heading={t`Customize`}>
-              <SidePanelEditColorOption
-                navigationMenuItemId={selectedItem.id}
-                color={parseThemeColor(selectedItem.color)}
-              />
-            </SidePanelGroup>
-          )}
           <SidePanelEditOrganizeActions
             canMoveUp={canMoveUp}
             canMoveDown={canMoveDown}
