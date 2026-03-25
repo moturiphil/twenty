@@ -1,8 +1,10 @@
 import { vi } from 'vitest';
 
-import { appBuild } from '@/cli/public-operations/app-build';
-import { appUninstall } from '@/cli/public-operations/app-uninstall';
-import { functionExecute } from '@/cli/public-operations/function-execute';
+import { appBuild } from '@/cli/operations/build';
+import { appDeploy } from '@/cli/operations/deploy';
+import { appInstall } from '@/cli/operations/install';
+import { appUninstall } from '@/cli/operations/uninstall';
+import { functionExecute } from '@/cli/operations/execute';
 import { FUNCTION_EXECUTE_APP_PATH } from '@/cli/__tests__/apps/fixture-paths';
 
 const ADD_NUMBERS_UNIVERSAL_IDENTIFIER = 'f9e5589c-e951-4d99-85db-0a305ab53502';
@@ -11,11 +13,29 @@ const APP_PATH = FUNCTION_EXECUTE_APP_PATH;
 
 describe('functionExecute E2E', () => {
   beforeAll(async () => {
-    const buildResult = await appBuild({ appPath: APP_PATH });
+    const buildResult = await appBuild({ appPath: APP_PATH, tarball: true });
 
     if (!buildResult.success) {
       throw new Error(
         `appBuild failed: ${buildResult.error.code} – ${buildResult.error.message}`,
+      );
+    }
+
+    const deployResult = await appDeploy({
+      tarballPath: buildResult.data.tarballPath!,
+    });
+
+    if (!deployResult.success) {
+      throw new Error(
+        `appDeploy failed: ${deployResult.error.code} – ${deployResult.error.message}`,
+      );
+    }
+
+    const installResult = await appInstall({ appPath: APP_PATH });
+
+    if (!installResult.success) {
+      throw new Error(
+        `appInstall failed: ${installResult.error.code} – ${installResult.error.message}`,
       );
     }
 

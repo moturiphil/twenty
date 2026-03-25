@@ -37,9 +37,9 @@ export class CommandMenuItemDTO {
   frontComponent?: FrontComponentDTO | null;
 
   @IsEnum(EngineComponentKey)
-  @IsOptional()
-  @Field(() => EngineComponentKey, { nullable: true })
-  engineComponentKey?: EngineComponentKey;
+  @IsNotEmpty()
+  @Field(() => EngineComponentKey)
+  engineComponentKey: EngineComponentKey;
 
   @IsString()
   @IsNotEmpty()
@@ -67,6 +67,11 @@ export class CommandMenuItemDTO {
   @IsEnum(CommandMenuItemAvailabilityType)
   @Field(() => CommandMenuItemAvailabilityType)
   availabilityType: CommandMenuItemAvailabilityType;
+
+  @IsString({ each: true })
+  @IsOptional()
+  @Field(() => [String], { nullable: true })
+  hotKeys?: string[];
 
   @IsString()
   @IsOptional()

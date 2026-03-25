@@ -6,8 +6,8 @@ import {
 } from 'twenty-ui/display';
 
 import { NavigationMenuItemType, SidePanelPages } from 'twenty-shared/types';
-import { useWorkspaceSectionItems } from '@/navigation-menu-item/hooks/useWorkspaceSectionItems';
-import { selectedNavigationMenuItemInEditModeState } from '@/navigation-menu-item/states/selectedNavigationMenuItemInEditModeState';
+import { useNavigationMenuItemSectionItems } from '@/navigation-menu-item/display/hooks/useNavigationMenuItemSectionItems';
+import { selectedNavigationMenuItemIdInEditModeState } from '@/navigation-menu-item/common/states/selectedNavigationMenuItemIdInEditModeState';
 import { SidePanelAskAIInfo } from '@/side-panel/components/SidePanelAskAIInfo';
 import { SidePanelFolderInfo } from '@/side-panel/components/SidePanelFolderInfo';
 import { SidePanelLinkInfo } from '@/side-panel/components/SidePanelLinkInfo';
@@ -34,10 +34,10 @@ type SidePanelPageInfoProps = {
 
 export const SidePanelPageInfo = ({ pageChip }: SidePanelPageInfoProps) => {
   const { theme } = useContext(ThemeContext);
-  const selectedNavigationMenuItemInEditMode = useAtomStateValue(
-    selectedNavigationMenuItemInEditModeState,
+  const selectedNavigationMenuItemIdInEditMode = useAtomStateValue(
+    selectedNavigationMenuItemIdInEditModeState,
   );
-  const items = useWorkspaceSectionItems();
+  const items = useNavigationMenuItemSectionItems();
 
   if (!isDefined(pageChip)) {
     return null;
@@ -46,7 +46,7 @@ export const SidePanelPageInfo = ({ pageChip }: SidePanelPageInfoProps) => {
   const isNavigationMenuItemEditPage =
     pageChip.page?.page === SidePanelPages.NavigationMenuItemEdit;
   const selectedNavItem = isNavigationMenuItemEditPage
-    ? items.find((item) => item.id === selectedNavigationMenuItemInEditMode)
+    ? items.find((item) => item.id === selectedNavigationMenuItemIdInEditMode)
     : undefined;
 
   if (isNavigationMenuItemEditPage && isDefined(selectedNavItem)) {
@@ -101,6 +101,7 @@ export const SidePanelPageInfo = ({ pageChip }: SidePanelPageInfoProps) => {
         SidePanelPages.PageLayoutIframeSettings,
         SidePanelPages.PageLayoutTabSettings,
         SidePanelPages.PageLayoutFieldsSettings,
+        SidePanelPages.PageLayoutRecordTableSettings,
       ].includes(pageChip.page?.page)
     : false;
 

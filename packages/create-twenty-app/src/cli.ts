@@ -27,6 +27,14 @@ const program = new Command(packageJson.name)
     '--description <description>',
     'Application description (skips prompt)',
   )
+  .option(
+    '--skip-local-instance',
+    'Skip the local Twenty instance setup prompt',
+  )
+  .option(
+    '-p, --port <port>',
+    'Port of an existing Twenty server (skips Docker setup)',
+  )
   .helpOption('-h, --help', 'Display this help message.')
   .action(
     async (
@@ -37,6 +45,8 @@ const program = new Command(packageJson.name)
         name?: string;
         displayName?: string;
         description?: string;
+        skipLocalInstance?: boolean;
+        port?: string;
       },
     ) => {
       const modeFlags = [options?.exhaustive, options?.minimal].filter(Boolean);
@@ -66,12 +76,16 @@ const program = new Command(packageJson.name)
 
       const mode: ScaffoldingMode = options?.minimal ? 'minimal' : 'exhaustive';
 
+      const port = options?.port ? parseInt(options.port, 10) : undefined;
+
       await new CreateAppCommand().execute({
         directory,
         mode,
         name: options?.name,
         displayName: options?.displayName,
         description: options?.description,
+        skipLocalInstance: options?.skipLocalInstance,
+        port,
       });
     },
   );
