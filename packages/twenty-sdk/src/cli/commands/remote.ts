@@ -69,49 +69,21 @@ export const registerRemoteCommands = (program: Command): void => {
     .command('add [nameOrUrl]')
     .description('Add a new remote or re-authenticate an existing one')
     .option('--as <name>', 'Name for this remote')
-    .option('--local', 'Connect to local development server')
-    .option('--port <port>', 'Port for local server (use with --local)')
     .option('--token <token>', 'API key for non-interactive auth')
     .option('--url <url>', 'Server URL (alternative to positional arg)')
+    .option('--local', 'Connect to a local Twenty server (auto-detect)')
     .action(
       async (
         nameOrUrl: string | undefined,
         options: {
           as?: string;
-          local?: boolean;
-          port?: string;
           token?: string;
           url?: string;
+          local?: boolean;
         },
       ) => {
         const configService = new ConfigService();
         const existingRemotes = await configService.getRemotes();
-
-        if (options.local) {
-          const remoteName = options.as ?? 'local';
-          const preferredPort = options.port
-            ? parseInt(options.port, 10)
-            : undefined;
-          const localUrl = preferredPort
-            ? `http://localhost:${preferredPort}`
-            : await detectLocalServer();
-
-          if (!localUrl) {
-            console.error(
-              chalk.red(
-                'No local Twenty server found on ports 2020 or 3000.\n' +
-                  'Start one with: yarn twenty server start',
-              ),
-            );
-            process.exit(1);
-          }
-
-          console.log(chalk.gray(`Found server at ${localUrl}`));
-          ConfigService.setActiveRemote(remoteName);
-          await authenticate(localUrl, options.token);
-
-          return;
-        }
 
         // Re-authenticate an existing remote by name
         const isExistingRemote =
@@ -126,30 +98,50 @@ export const registerRemoteCommands = (program: Command): void => {
           return;
         }
 
-        // Resolve the URL — from args, flags, or interactive prompt
-        const apiUrl =
-          nameOrUrl ??
-          options.url ??
-          (options.token
-            ? ((await detectLocalServer()) ?? 'http://localhost:2020')
-            : (
-                await inquirer.prompt<{ apiUrl: string }>([
-                  {
-                    type: 'input',
-                    name: 'apiUrl',
-                    message: 'Twenty server URL:',
-                    validate: (input: string) => {
-                      try {
-                        new URL(input);
+        // Resolve the URL — from args, flags, auto-detect, or interactive prompt
+        let apiUrl = nameOrUrl ?? options.url;
 
-                        return true;
-                      } catch {
-                        return 'Please enter a valid URL';
-                      }
-                    },
+        if (!apiUrl) {
+          const detectedUrl = await detectLocalServer();
+
+          if (options.local) {
+            if (!detectedUrl) {
+              console.error(
+                chalk.red(
+                  'No local Twenty server found.\n' +
+                    'Start one with: yarn twenty server start',
+                ),
+              );
+              process.exit(1);
+            }
+
+            apiUrl = detectedUrl;
+          } else if (detectedUrl) {
+            console.log(chalk.gray(`Found local server at ${detectedUrl}`));
+            apiUrl = detectedUrl;
+          } else if (options.token) {
+            apiUrl = 'http://localhost:2020';
+          } else {
+            apiUrl = (
+              await inquirer.prompt<{ apiUrl: string }>([
+                {
+                  type: 'input',
+                  name: 'apiUrl',
+                  message: 'Twenty server URL:',
+                  validate: (input: string) => {
+                    try {
+                      new URL(input);
+
+                      return true;
+                    } catch {
+                      return 'Please enter a valid URL';
+                    }
                   },
-                ])
-              ).apiUrl);
+                },
+              ])
+            ).apiUrl;
+          }
+        }
 
         const name = options.as ?? deriveRemoteName(apiUrl);
 
