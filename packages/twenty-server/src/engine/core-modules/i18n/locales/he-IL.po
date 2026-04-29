@@ -1168,17 +1168,6 @@ msgstr "לא ניתן לתת הרשאת כתיבה ללא הרשאת קריאה.
 msgid "Cannot have more than one active workflow version"
 msgstr "לא ניתן להחזיק ביותר מגרסת תהליך עבודה פעילה אחת"
 
-#. js-lingui-id: oCh764
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
-msgid "Cannot modify permissions on a role owned by another application"
-msgstr ""
-
-#. js-lingui-id: M47UGK
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
-#: src/engine/metadata-modules/permissions/permissions.exception.ts
-msgid "Cannot modify permissions on a role owned by another application."
-msgstr ""
-
 #. js-lingui-id: DAGexD
 #: src/engine/metadata-modules/row-level-permission-predicate/exceptions/row-level-permission-predicate.exception.ts
 msgid "Cannot modify predicate belonging to a different object."
@@ -1253,6 +1242,17 @@ msgstr "לא ניתן להחליף את מרווח המנוי."
 #: src/engine/core-modules/billing/billing.exception.ts
 msgid "Cannot switch subscription plan."
 msgstr "לא ניתן להחליף תוכנית מנוי."
+
+#. js-lingui-id: jNnzPT
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
+msgid "Cannot target a role owned by another application"
+msgstr ""
+
+#. js-lingui-id: 2ET75e
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
+#: src/engine/metadata-modules/permissions/permissions.exception.ts
+msgid "Cannot target a role owned by another application."
+msgstr ""
 
 #. js-lingui-id: fpzw+t
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-agent-validator.service.ts
@@ -3667,6 +3667,11 @@ msgstr "ערך לא חוקי עבור תאריך: \"{inspectedValue}\". תבני
 msgid "Invalid value for emails."
 msgstr "ערך לא תקין עבור כתובות דוא\"ל."
 
+#. js-lingui-id: qvqNco
+#: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-rating-and-select-field-or-throw.util.ts
+msgid "Invalid value for field \"{fieldName}\""
+msgstr ""
+
 #. js-lingui-id: tfoEIq
 #: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-files-field-or-throw.util.ts
 msgid "Invalid value for FILES field \"{fieldName}\" - {errorMessage}"
@@ -3720,11 +3725,6 @@ msgstr "ערך לא תקין עבור מיקום: \"{inspectedValue}\""
 msgid "Invalid value for rich text."
 msgstr "ערך לא תקין עבור טקסט עשיר."
 
-#. js-lingui-id: 9lVA5C
-#: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-rating-and-select-field-or-throw.util.ts
-msgid "Invalid value for select: \"{inspectedValue}\""
-msgstr "ערך לא תקין עבור בחירה: \"{inspectedValue}\""
-
 #. js-lingui-id: ZjemzY
 #: src/engine/api/common/common-args-processors/filter-arg-processor/validator-utils/validate-uuid-field-or-throw.util.ts
 #: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-uuid-field-or-throw.util.ts
@@ -3752,14 +3752,14 @@ msgstr "קוד אימות לא תקין."
 msgid "Invalid verification code. Please try again."
 msgstr "קוד אימות לא תקין. נא לנסות שוב."
 
-#. js-lingui-id: bKmxhF
+#. js-lingui-id: UV7Pll
 #: src/engine/metadata-modules/flat-page-layout-widget/validators/utils/validate-fields-flat-page-layout-widget-for-creation.util.ts
-msgid "Invalid viewId for fields widget"
+msgid "Invalid viewUniversalIdentifier for fields widget"
 msgstr ""
 
-#. js-lingui-id: DpWmTi
+#. js-lingui-id: Bj1WZ+
 #: src/engine/metadata-modules/flat-page-layout-widget/validators/utils/validate-fields-flat-page-layout-widget-for-creation.util.ts
-msgid "Invalid viewId for fields widget \"{widgetTitle}\". Expected a valid UUID"
+msgid "Invalid viewUniversalIdentifier for fields widget \"{widgetTitle}\". Expected a valid UUID"
 msgstr ""
 
 #. js-lingui-id: z68tnU
@@ -5787,6 +5787,16 @@ msgstr "הרשומה אינה עומדת באילוצי האבטחה."
 #: src/engine/core-modules/record-crud/exceptions/record-crud.exception.ts
 msgid "Record not found."
 msgstr "רשומה לא נמצאה."
+
+#. js-lingui-id: LVUF8D
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
+msgid "Record table widget has no associated view"
+msgstr ""
+
+#. js-lingui-id: KnnILY
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
+msgid "Record table widget not found"
+msgstr ""
 
 #. js-lingui-id: 9gXJw8
 #: src/engine/workspace-manager/twenty-standard-application/utils/field-metadata/compute-calendar-channel-event-association-standard-flat-field-metadata.util.ts
@@ -7883,13 +7893,20 @@ msgstr "לא נמצא מידע מטה של שדה מצטבר לקנבן תצוג
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-field-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-field-group-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-field-group-validator.service.ts
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
 msgid "View not found"
 msgstr "תצוגה לא נמצאה"
 
 #. js-lingui-id: BHDATQ
 #: src/engine/metadata-modules/view-field-group/services/fields-widget-upsert.service.ts
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
 msgid "View not found after upsert"
 msgstr "התצוגה לא נמצאה לאחר הוספה/עדכון"
+
+#. js-lingui-id: RAcTQ1
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
+msgid "View not found for widget"
+msgstr ""
 
 #. js-lingui-id: yheEin
 #: src/engine/metadata-modules/view/exceptions/flat-view.exception.ts

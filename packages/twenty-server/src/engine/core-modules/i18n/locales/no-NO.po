@@ -1168,17 +1168,6 @@ msgstr "Kan ikke gi skrivetillatelse uten lesetillatelse."
 msgid "Cannot have more than one active workflow version"
 msgstr "Kan ikke ha mer enn én aktiv arbeidsflytversjon"
 
-#. js-lingui-id: oCh764
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
-msgid "Cannot modify permissions on a role owned by another application"
-msgstr ""
-
-#. js-lingui-id: M47UGK
-#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
-#: src/engine/metadata-modules/permissions/permissions.exception.ts
-msgid "Cannot modify permissions on a role owned by another application."
-msgstr ""
-
 #. js-lingui-id: DAGexD
 #: src/engine/metadata-modules/row-level-permission-predicate/exceptions/row-level-permission-predicate.exception.ts
 msgid "Cannot modify predicate belonging to a different object."
@@ -1253,6 +1242,17 @@ msgstr "Kan ikke bytte abonnementsintervall."
 #: src/engine/core-modules/billing/billing.exception.ts
 msgid "Cannot switch subscription plan."
 msgstr "Kan ikke bytte abonnementsplan."
+
+#. js-lingui-id: jNnzPT
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
+msgid "Cannot target a role owned by another application"
+msgstr ""
+
+#. js-lingui-id: 2ET75e
+#: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/utils/validate-role-belongs-to-caller-application.util.ts
+#: src/engine/metadata-modules/permissions/permissions.exception.ts
+msgid "Cannot target a role owned by another application."
+msgstr ""
 
 #. js-lingui-id: fpzw+t
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-agent-validator.service.ts
@@ -3667,6 +3667,11 @@ msgstr "Ugyldig verdi for dato: \"{inspectedValue}\". Forventet format: 'YYYY-MM
 msgid "Invalid value for emails."
 msgstr "Ugyldig verdi for e-postadresser."
 
+#. js-lingui-id: qvqNco
+#: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-rating-and-select-field-or-throw.util.ts
+msgid "Invalid value for field \"{fieldName}\""
+msgstr ""
+
 #. js-lingui-id: tfoEIq
 #: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-files-field-or-throw.util.ts
 msgid "Invalid value for FILES field \"{fieldName}\" - {errorMessage}"
@@ -3720,11 +3725,6 @@ msgstr "Ugyldig verdi for posisjon: \"{inspectedValue}\""
 msgid "Invalid value for rich text."
 msgstr "Ugyldig verdi for rik tekst."
 
-#. js-lingui-id: 9lVA5C
-#: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-rating-and-select-field-or-throw.util.ts
-msgid "Invalid value for select: \"{inspectedValue}\""
-msgstr "Ugyldig verdi for valgfelt: \"{inspectedValue}\""
-
 #. js-lingui-id: ZjemzY
 #: src/engine/api/common/common-args-processors/filter-arg-processor/validator-utils/validate-uuid-field-or-throw.util.ts
 #: src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-uuid-field-or-throw.util.ts
@@ -3752,14 +3752,14 @@ msgstr "Ugyldig verifiseringskode."
 msgid "Invalid verification code. Please try again."
 msgstr "Ugyldig verifiseringskode. Vennligst prøv igjen."
 
-#. js-lingui-id: bKmxhF
+#. js-lingui-id: UV7Pll
 #: src/engine/metadata-modules/flat-page-layout-widget/validators/utils/validate-fields-flat-page-layout-widget-for-creation.util.ts
-msgid "Invalid viewId for fields widget"
+msgid "Invalid viewUniversalIdentifier for fields widget"
 msgstr ""
 
-#. js-lingui-id: DpWmTi
+#. js-lingui-id: Bj1WZ+
 #: src/engine/metadata-modules/flat-page-layout-widget/validators/utils/validate-fields-flat-page-layout-widget-for-creation.util.ts
-msgid "Invalid viewId for fields widget \"{widgetTitle}\". Expected a valid UUID"
+msgid "Invalid viewUniversalIdentifier for fields widget \"{widgetTitle}\". Expected a valid UUID"
 msgstr ""
 
 #. js-lingui-id: z68tnU
@@ -5787,6 +5787,16 @@ msgstr "Oppføringen oppfyller ikke sikkerhetsbegrensningene."
 #: src/engine/core-modules/record-crud/exceptions/record-crud.exception.ts
 msgid "Record not found."
 msgstr "Oppføring ikke funnet."
+
+#. js-lingui-id: LVUF8D
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
+msgid "Record table widget has no associated view"
+msgstr ""
+
+#. js-lingui-id: KnnILY
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
+msgid "Record table widget not found"
+msgstr ""
 
 #. js-lingui-id: 9gXJw8
 #: src/engine/workspace-manager/twenty-standard-application/utils/field-metadata/compute-calendar-channel-event-association-standard-flat-field-metadata.util.ts
@@ -7883,13 +7893,20 @@ msgstr "Kanban-visning aggregatfeltmetadata ikke funnet"
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-field-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-field-group-validator.service.ts
 #: src/engine/workspace-manager/workspace-migration/workspace-migration-builder/validators/services/flat-view-field-group-validator.service.ts
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
 msgid "View not found"
 msgstr "Visning ikke funnet"
 
 #. js-lingui-id: BHDATQ
 #: src/engine/metadata-modules/view-field-group/services/fields-widget-upsert.service.ts
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
 msgid "View not found after upsert"
 msgstr "Visning ble ikke funnet etter upsert"
+
+#. js-lingui-id: RAcTQ1
+#: src/engine/metadata-modules/view/services/view-widget-upsert.service.ts
+msgid "View not found for widget"
+msgstr ""
 
 #. js-lingui-id: yheEin
 #: src/engine/metadata-modules/view/exceptions/flat-view.exception.ts
