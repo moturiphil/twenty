@@ -44,7 +44,11 @@ export { deepMerge } from './deepMerge';
 export { CustomError } from './errors/CustomError';
 export { evalFromContext } from './evalFromContext';
 export { extractAndSanitizeObjectStringFields } from './extractAndSanitizeObjectStringFields';
-export { computeMorphRelationFieldName } from './fieldMetadata/compute-morph-relation-field-name';
+export { computeMorphRelationGqlFieldName } from './fieldMetadata/compute-morph-relation-gql-field-name';
+export {
+  computeRelationGqlFieldJoinColumnName,
+  computeMorphRelationGqlFieldJoinColumnName,
+} from './fieldMetadata/compute-relation-gql-field-join-column-name';
 export { isFieldMetadataArrayKind } from './fieldMetadata/isFieldMetadataArrayKind';
 export { isFieldMetadataDateKind } from './fieldMetadata/isFieldMetadataDateKind';
 export { isFieldMetadataEligibleForFieldsWidget } from './fieldMetadata/isFieldMetadataEligibleForFieldsWidget';
@@ -100,6 +104,7 @@ export type {
   RecordFilterGroup,
 } from './filter/turnRecordFilterGroupIntoGqlOperationFilter';
 export { turnRecordFilterGroupsIntoGqlOperationFilter } from './filter/turnRecordFilterGroupIntoGqlOperationFilter';
+export type { FieldShared } from './filter/turnRecordFilterIntoGqlOperationFilter';
 export { turnRecordFilterIntoRecordGqlOperationFilter } from './filter/turnRecordFilterIntoGqlOperationFilter';
 export { combineFilters } from './filter/utils/combineFilters';
 export { convertViewFilterOperandToCoreOperand } from './filter/utils/convert-view-filter-operand-to-core-operand.util';
@@ -189,6 +194,7 @@ export { isMetadataGqlOperationSignature } from './typeguard/isMetadataGqlOperat
 export { isPlainObject } from './typeguard/isPlainObject';
 export { isRecordGqlOperationSignature } from './typeguard/isRecordGqlOperationSignature';
 export { throwIfNotDefined } from './typeguard/throwIfNotDefined';
+export { formatUpgradeCommandName } from './upgrade/formatUpgradeCommandName';
 export { absoluteUrlSchema } from './url/absoluteUrlSchema';
 export { buildSignedPath } from './url/buildSignedPath';
 export { ensureAbsoluteUrl } from './url/ensureAbsoluteUrl';

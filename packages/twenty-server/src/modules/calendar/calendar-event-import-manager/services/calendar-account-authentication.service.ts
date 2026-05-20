@@ -7,7 +7,7 @@ import {
   CalendarEventImportDriverException,
   CalendarEventImportDriverExceptionCode,
 } from 'src/modules/calendar/calendar-event-import-manager/drivers/exceptions/calendar-event-import-driver.exception';
-import { ConnectedAccountRefreshAccessTokenExceptionCode } from 'src/modules/connected-account/refresh-tokens-manager/exceptions/connected-account-refresh-tokens.exception';
+import { ConnectedAccountRefreshAccessTokenExceptionCode } from 'src/engine/metadata-modules/connected-account/exceptions/connected-account-refresh-tokens.exception';
 import {
   ConnectedAccountRefreshTokensService,
   type ConnectedAccountTokens,
@@ -73,7 +73,7 @@ export class CalendarAccountAuthenticationService {
     workspaceId,
   }: ValidateAndRefreshConnectedAccountAuthenticationParams): Promise<ConnectedAccountTokens> {
     try {
-      return await this.connectedAccountRefreshTokensService.refreshAndSaveTokens(
+      return await this.connectedAccountRefreshTokensService.resolveTokens(
         connectedAccount,
         workspaceId,
       );

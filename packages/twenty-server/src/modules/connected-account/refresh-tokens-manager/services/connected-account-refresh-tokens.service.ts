@@ -5,19 +5,21 @@ import { ConnectedAccountProvider } from 'twenty-shared/types';
 import { assertUnreachable, isDefined } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
 
+import { AppOAuthRefreshAccessTokenService } from 'src/engine/core-modules/application/connection-provider/refresh/services/app-oauth-refresh-tokens.service';
 import { ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
+import {
+  ConnectedAccountRefreshAccessTokenException,
+  ConnectedAccountRefreshAccessTokenExceptionCode,
+} from 'src/engine/metadata-modules/connected-account/exceptions/connected-account-refresh-tokens.exception';
+import { ConnectedAccountTokenEncryptionService } from 'src/engine/metadata-modules/connected-account/services/connected-account-token-encryption.service';
 import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
 import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { GoogleAPIRefreshAccessTokenService } from 'src/modules/connected-account/refresh-tokens-manager/drivers/google/services/google-api-refresh-tokens.service';
 import { MicrosoftAPIRefreshAccessTokenService } from 'src/modules/connected-account/refresh-tokens-manager/drivers/microsoft/services/microsoft-api-refresh-tokens.service';
-import {
-  ConnectedAccountRefreshAccessTokenException,
-  ConnectedAccountRefreshAccessTokenExceptionCode,
-} from 'src/modules/connected-account/refresh-tokens-manager/exceptions/connected-account-refresh-tokens.exception';
 
 export type ConnectedAccountTokens = {
   accessToken: string;
-  refreshToken: string;
+  refreshToken: string | null;
 };
 
 const CONNECTED_ACCOUNT_ACCESS_TOKEN_EXPIRATION = 1000 * 60 * 60;
@@ -31,24 +33,17 @@ export class ConnectedAccountRefreshTokensService {
   constructor(
     private readonly googleAPIRefreshAccessTokenService: GoogleAPIRefreshAccessTokenService,
     private readonly microsoftAPIRefreshAccessTokenService: MicrosoftAPIRefreshAccessTokenService,
+    private readonly appOAuthRefreshAccessTokenService: AppOAuthRefreshAccessTokenService,
     private readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager,
+    private readonly connectedAccountTokenEncryptionService: ConnectedAccountTokenEncryptionService,
     @InjectRepository(ConnectedAccountEntity)
     private readonly connectedAccountRepository: Repository<ConnectedAccountEntity>,
   ) {}
 
-  async refreshAndSaveTokens(
+  async resolveTokens(
     connectedAccount: ConnectedAccountEntity,
     workspaceId: string,
   ): Promise<ConnectedAccountTokens> {
-    const { refreshToken, accessToken } = connectedAccount;
-
-    if (!refreshToken) {
-      throw new ConnectedAccountRefreshAccessTokenException(
-        `No refresh token found for connected account ${connectedAccount.id} in workspace ${workspaceId}`,
-        ConnectedAccountRefreshAccessTokenExceptionCode.REFRESH_TOKEN_NOT_FOUND,
-      );
-    }
-
     const isAccessTokenValid =
       await this.isAccessTokenStillValid(connectedAccount);
 
@@ -56,28 +51,85 @@ export class ConnectedAccountRefreshTokensService {
       this.logger.debug(
         `Reusing valid access token for connected account ${connectedAccount.id.slice(0, 7)} in workspace ${workspaceId.slice(0, 7)}`,
       );
-      if (!isDefined(accessToken)) {
-        throw new ConnectedAccountRefreshAccessTokenException(
-          `Access token is required for connected account ${connectedAccount.id} in workspace ${workspaceId}`,
-          ConnectedAccountRefreshAccessTokenExceptionCode.ACCESS_TOKEN_NOT_FOUND,
-        );
-      }
 
-      return {
-        accessToken,
-        refreshToken,
-      };
+      return this.decryptExistingTokens(connectedAccount, workspaceId);
+    }
+
+    const encryptedRefreshToken = connectedAccount.refreshToken;
+
+    if (!isDefined(encryptedRefreshToken)) {
+      throw new ConnectedAccountRefreshAccessTokenException(
+        `No refresh token found for connected account ${connectedAccount.id} in workspace ${workspaceId}`,
+        ConnectedAccountRefreshAccessTokenExceptionCode.REFRESH_TOKEN_NOT_FOUND,
+      );
     }
 
     this.logger.debug(
       `Access token expired for connected account ${connectedAccount.id} in workspace ${workspaceId}, refreshing...`,
     );
 
-    const connectedAccountTokens = await this.refreshTokens(
+    return this.performRefreshAndSave(
       connectedAccount,
-      refreshToken,
+      encryptedRefreshToken,
       workspaceId,
     );
+  }
+
+  private decryptExistingTokens(
+    connectedAccount: ConnectedAccountEntity,
+    workspaceId: string,
+  ): ConnectedAccountTokens {
+    const {
+      accessToken: encryptedAccessToken,
+      refreshToken: encryptedRefreshToken,
+    } = connectedAccount;
+
+    if (!isDefined(encryptedAccessToken)) {
+      throw new ConnectedAccountRefreshAccessTokenException(
+        `Access token is required for connected account ${connectedAccount.id} in workspace ${workspaceId}`,
+        ConnectedAccountRefreshAccessTokenExceptionCode.ACCESS_TOKEN_NOT_FOUND,
+      );
+    }
+
+    return {
+      accessToken: this.connectedAccountTokenEncryptionService.decrypt({
+        ciphertext: encryptedAccessToken,
+        workspaceId,
+      }),
+      refreshToken: isDefined(encryptedRefreshToken)
+        ? this.connectedAccountTokenEncryptionService.decrypt({
+            ciphertext: encryptedRefreshToken,
+            workspaceId,
+          })
+        : null,
+    };
+  }
+
+  private async performRefreshAndSave(
+    connectedAccount: ConnectedAccountEntity,
+    encryptedRefreshToken: string,
+    workspaceId: string,
+  ): Promise<ConnectedAccountTokens> {
+    const decryptedRefreshToken =
+      this.connectedAccountTokenEncryptionService.decrypt({
+        ciphertext: encryptedRefreshToken,
+        workspaceId,
+      });
+
+    const connectedAccountTokens = await this.refreshTokens(
+      connectedAccount,
+      decryptedRefreshToken,
+      workspaceId,
+    );
+
+    const {
+      encryptedAccessToken: reEncryptedAccessToken,
+      encryptedRefreshToken: reEncryptedRefreshToken,
+    } = this.connectedAccountTokenEncryptionService.encryptTokenPair({
+      accessToken: connectedAccountTokens.accessToken,
+      refreshToken: connectedAccountTokens.refreshToken,
+      workspaceId,
+    });
 
     const authContext = buildSystemAuthContext(workspaceId);
 
@@ -85,7 +137,8 @@ export class ConnectedAccountRefreshTokensService {
       await this.connectedAccountRepository.update(
         { id: connectedAccount.id, workspaceId },
         {
-          ...connectedAccountTokens,
+          accessToken: reEncryptedAccessToken,
+          refreshToken: reEncryptedRefreshToken,
           lastCredentialsRefreshedAt: new Date(),
         },
       );
@@ -99,7 +152,8 @@ export class ConnectedAccountRefreshTokensService {
   ): Promise<boolean> {
     switch (connectedAccount.provider) {
       case ConnectedAccountProvider.GOOGLE:
-      case ConnectedAccountProvider.MICROSOFT: {
+      case ConnectedAccountProvider.MICROSOFT:
+      case ConnectedAccountProvider.APP: {
         if (!connectedAccount.lastCredentialsRefreshedAt) {
           return false;
         }
@@ -117,6 +171,7 @@ export class ConnectedAccountRefreshTokensService {
       case ConnectedAccountProvider.IMAP_SMTP_CALDAV:
       case ConnectedAccountProvider.OIDC:
       case ConnectedAccountProvider.SAML:
+      case ConnectedAccountProvider.EMAIL_GROUP:
         return true;
       default:
         return assertUnreachable(
@@ -141,9 +196,15 @@ export class ConnectedAccountRefreshTokensService {
           return await this.microsoftAPIRefreshAccessTokenService.refreshTokens(
             refreshToken,
           );
+        case ConnectedAccountProvider.APP:
+          return await this.appOAuthRefreshAccessTokenService.refreshTokens(
+            connectedAccount,
+            refreshToken,
+          );
         case ConnectedAccountProvider.IMAP_SMTP_CALDAV:
         case ConnectedAccountProvider.OIDC:
         case ConnectedAccountProvider.SAML:
+        case ConnectedAccountProvider.EMAIL_GROUP:
           throw new ConnectedAccountRefreshAccessTokenException(
             `Token refresh is not supported for ${connectedAccount.provider} provider for connected account ${connectedAccount.id} in workspace ${workspaceId}`,
             ConnectedAccountRefreshAccessTokenExceptionCode.PROVIDER_NOT_SUPPORTED,

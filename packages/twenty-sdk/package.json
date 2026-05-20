@@ -1,6 +1,6 @@
 {
   "name": "twenty-sdk",
-  "version": "2.1.0",
+  "version": "2.7.0",
   "sideEffects": false,
   "bin": {
     "twenty": "dist/cli.cjs"
@@ -41,6 +41,11 @@
       "types": "./dist/logic-function/index.d.ts",
       "import": "./dist/logic-function/index.mjs",
       "require": "./dist/logic-function/index.cjs"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.mjs",
+      "require": "./dist/utils/index.cjs"
     },
     "./ui": {
       "types": "./dist/ui/index.d.ts",
@@ -96,8 +101,12 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@typescript/native-preview": "^7.0.0-dev.20260116.1",
+    "@vitest/coverage-v8": "^4.0.18",
+    "prettier": "^3.1.1",
     "rollup-plugin-dts": "^6.4.1",
     "ts-morph": "^25.0.0",
+    "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
     "twenty-shared": "workspace:*",
     "twenty-ui": "workspace:*",
@@ -118,6 +127,9 @@
       ],
       "logic-function": [
         "dist/logic-function/index.d.ts"
+      ],
+      "utils": [
+        "dist/utils/index.d.ts"
       ],
       "cli": [
         "dist/cli/operations/index.d.ts"

@@ -4,7 +4,9 @@ import { isDefined } from 'twenty-shared/utils';
 
 import { generateIndexForFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/generate-index-for-flat-field-metadata.util';
 
+import { fromApplicationVariableManifestToUniversalFlatApplicationVariable } from 'src/engine/core-modules/application/application-manifest/converters/from-application-variable-manifest-to-universal-flat-application-variable.util';
 import { fromCommandMenuItemManifestToUniversalFlatCommandMenuItem } from 'src/engine/core-modules/application/application-manifest/converters/from-command-menu-item-manifest-to-universal-flat-command-menu-item.util';
+import { fromConnectionProviderManifestToUniversalFlatConnectionProvider } from 'src/engine/core-modules/application/application-manifest/converters/from-connection-provider-manifest-to-universal-flat-connection-provider.util';
 import { fromFieldManifestToUniversalFlatFieldMetadata } from 'src/engine/core-modules/application/application-manifest/converters/from-field-manifest-to-universal-flat-field-metadata.util';
 import { fromFieldPermissionManifestToUniversalFlatFieldPermission } from 'src/engine/core-modules/application/application-manifest/converters/from-field-permission-manifest-to-universal-flat-field-permission.util';
 import { fromFrontComponentManifestToUniversalFlatFrontComponent } from 'src/engine/core-modules/application/application-manifest/converters/from-front-component-manifest-to-universal-flat-front-component.util';
@@ -15,7 +17,7 @@ import { fromObjectPermissionManifestToUniversalFlatObjectPermission } from 'src
 import { fromPageLayoutManifestToUniversalFlatPageLayout } from 'src/engine/core-modules/application/application-manifest/converters/from-page-layout-manifest-to-universal-flat-page-layout.util';
 import { fromPageLayoutTabManifestToUniversalFlatPageLayoutTab } from 'src/engine/core-modules/application/application-manifest/converters/from-page-layout-tab-manifest-to-universal-flat-page-layout-tab.util';
 import { fromPageLayoutWidgetManifestToUniversalFlatPageLayoutWidget } from 'src/engine/core-modules/application/application-manifest/converters/from-page-layout-widget-manifest-to-universal-flat-page-layout-widget.util';
-import { fromPermissionFlagToUniversalFlatPermissionFlag } from 'src/engine/core-modules/application/application-manifest/converters/from-permission-flag-to-universal-flat-permission-flag.util';
+import { fromPermissionFlagToUniversalFlatRolePermissionFlag } from 'src/engine/core-modules/application/application-manifest/converters/from-permission-flag-to-universal-flat-role-permission-flag.util';
 import { fromRoleManifestToUniversalFlatRole } from 'src/engine/core-modules/application/application-manifest/converters/from-role-manifest-to-universal-flat-role.util';
 import { fromSkillManifestToUniversalFlatSkill } from 'src/engine/core-modules/application/application-manifest/converters/from-skill-manifest-to-universal-flat-skill.util';
 import { computeSearchVectorUniversalSettingsFromObjectManifest } from 'src/engine/core-modules/application/application-manifest/utils/compute-search-vector-universal-settings-from-object-manifest.util';
@@ -157,23 +159,19 @@ export const computeApplicationManifestAllUniversalFlatEntityMaps = ({
       universalFlatEntityMapsToMutate:
         allUniversalFlatEntityMaps.flatFrontComponentMaps,
     });
+  }
 
-    if (frontComponentManifest.command) {
-      addUniversalFlatEntityToUniversalFlatEntityMapsThroughMutationOrThrow({
-        universalFlatEntity:
-          fromCommandMenuItemManifestToUniversalFlatCommandMenuItem({
-            commandMenuItemManifest: {
-              ...frontComponentManifest.command,
-              frontComponentUniversalIdentifier:
-                frontComponentManifest.universalIdentifier,
-            },
-            applicationUniversalIdentifier,
-            now,
-          }),
-        universalFlatEntityMapsToMutate:
-          allUniversalFlatEntityMaps.flatCommandMenuItemMaps,
-      });
-    }
+  for (const connectionProviderManifest of manifest.connectionProviders ?? []) {
+    addUniversalFlatEntityToUniversalFlatEntityMapsThroughMutationOrThrow({
+      universalFlatEntity:
+        fromConnectionProviderManifestToUniversalFlatConnectionProvider({
+          connectionProviderManifest,
+          applicationUniversalIdentifier,
+          now,
+        }),
+      universalFlatEntityMapsToMutate:
+        allUniversalFlatEntityMaps.flatConnectionProviderMaps,
+    });
   }
 
   for (const roleManifest of manifest.roles) {
@@ -216,14 +214,15 @@ export const computeApplicationManifestAllUniversalFlatEntityMaps = ({
 
     for (const permissionFlag of roleManifest.permissionFlags ?? []) {
       addUniversalFlatEntityToUniversalFlatEntityMapsThroughMutationOrThrow({
-        universalFlatEntity: fromPermissionFlagToUniversalFlatPermissionFlag({
-          permissionFlag,
-          roleUniversalIdentifier: roleManifest.universalIdentifier,
-          applicationUniversalIdentifier,
-          now,
-        }),
+        universalFlatEntity:
+          fromPermissionFlagToUniversalFlatRolePermissionFlag({
+            permissionFlag,
+            roleUniversalIdentifier: roleManifest.universalIdentifier,
+            applicationUniversalIdentifier,
+            now,
+          }),
         universalFlatEntityMapsToMutate:
-          allUniversalFlatEntityMaps.flatPermissionFlagMaps,
+          allUniversalFlatEntityMaps.flatRolePermissionFlagMaps,
       });
     }
   }
@@ -432,6 +431,47 @@ export const computeApplicationManifestAllUniversalFlatEntityMaps = ({
           allUniversalFlatEntityMaps.flatPageLayoutWidgetMaps,
       });
     }
+  }
+
+  for (const [key, applicationVariableManifest] of Object.entries(
+    manifest.application.applicationVariables ?? {},
+  )) {
+    addUniversalFlatEntityToUniversalFlatEntityMapsThroughMutationOrThrow({
+      universalFlatEntity:
+        fromApplicationVariableManifestToUniversalFlatApplicationVariable({
+          key,
+          universalIdentifier: applicationVariableManifest.universalIdentifier,
+          value:
+            'value' in applicationVariableManifest
+              ? applicationVariableManifest.value
+              : undefined,
+          description: applicationVariableManifest.description,
+          isSecret: applicationVariableManifest.isSecret,
+          applicationUniversalIdentifier,
+          now,
+        }),
+      universalFlatEntityMapsToMutate:
+        allUniversalFlatEntityMaps.flatApplicationVariableMaps,
+    });
+  }
+
+  for (const commandMenuItemManifest of manifest.commandMenuItems ?? []) {
+    if (!isDefined(commandMenuItemManifest.frontComponentUniversalIdentifier)) {
+      throw new Error(
+        `Top-level commandMenuItem "${commandMenuItemManifest.universalIdentifier}" is missing required frontComponentUniversalIdentifier`,
+      );
+    }
+
+    addUniversalFlatEntityToUniversalFlatEntityMapsThroughMutationOrThrow({
+      universalFlatEntity:
+        fromCommandMenuItemManifestToUniversalFlatCommandMenuItem({
+          commandMenuItemManifest,
+          applicationUniversalIdentifier,
+          now,
+        }),
+      universalFlatEntityMapsToMutate:
+        allUniversalFlatEntityMaps.flatCommandMenuItemMaps,
+    });
   }
 
   return allUniversalFlatEntityMaps;

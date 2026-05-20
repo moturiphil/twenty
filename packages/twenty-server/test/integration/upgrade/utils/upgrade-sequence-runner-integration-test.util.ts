@@ -14,6 +14,8 @@ import {
   type WorkspaceUpgradeStep,
 } from 'src/engine/core-modules/upgrade/services/upgrade-sequence-reader.service';
 import { UpgradeSequenceRunnerService } from 'src/engine/core-modules/upgrade/services/upgrade-sequence-runner.service';
+import { UpgradeAwareEntityMetadataAdapter } from 'src/engine/twenty-orm/upgrade-aware/upgrade-aware-entity-metadata.adapter';
+import { UpgradeStatusService } from 'src/engine/core-modules/upgrade/services/upgrade-status.service';
 import { WorkspaceCommandRunnerService } from 'src/engine/core-modules/upgrade/services/workspace-command-runner.service';
 import { UpgradeMigrationEntity } from 'src/engine/core-modules/upgrade/upgrade-migration.entity';
 import {
@@ -141,6 +143,14 @@ export const createUpgradeSequenceRunnerIntegrationTestModule = async () => {
         provide: UpgradeSequenceReaderService,
         useFactory: () => new UpgradeSequenceReaderService({} as any),
       },
+      {
+        provide: UpgradeStatusService,
+        useValue: {
+          invalidateInstanceAndAllWorkspacesStatus: jest
+            .fn()
+            .mockResolvedValue(undefined),
+        },
+      },
       InstanceCommandRunnerService,
       WorkspaceCommandRunnerService,
       {
@@ -167,6 +177,14 @@ export const createUpgradeSequenceRunnerIntegrationTestModule = async () => {
 
             return report;
           }),
+        },
+      },
+      {
+        provide: UpgradeAwareEntityMetadataAdapter,
+        useValue: {
+          refresh: jest.fn().mockResolvedValue(undefined),
+          isEntityAvailable: jest.fn().mockReturnValue(true),
+          getHiddenColumnPropertyNames: jest.fn().mockReturnValue(new Set()),
         },
       },
       UpgradeSequenceRunnerService,
