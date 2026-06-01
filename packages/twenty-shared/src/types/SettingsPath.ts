@@ -21,6 +21,7 @@ export enum SettingsPath {
   ObjectNewIndex = 'objects/:objectNamePlural/new-index',
   ObjectFieldEdit = 'objects/:objectNamePlural/:fieldName',
   NewObject = 'objects/new',
+  Layout = 'layout',
   WorkspaceMembersPage = 'members',
   WorkspaceMemberPage = 'members/:workspaceMemberId',
   Workspace = 'general',
@@ -84,6 +85,7 @@ export enum SettingsPath {
   AdminPanelUserDetail = 'admin-panel/users/:userId',
   AdminPanelWorkspaceDetail = 'admin-panel/workspaces/:workspaceId',
   AdminPanelApplicationRegistrationDetail = 'admin-panel/applications/registrations/:applicationRegistrationId',
+  AdminPanelApplicationRegistrationConfigVariableDetails = 'admin-panel/applications/registrations/:applicationRegistrationId/config-variables/:variableKey',
   AdminPanelWorkspaceChatThread = 'admin-panel/workspaces/:workspaceId/threads/:threadId',
 
   Roles = 'members/roles',
