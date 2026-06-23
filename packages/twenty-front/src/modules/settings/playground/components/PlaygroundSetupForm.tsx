@@ -7,7 +7,7 @@ import { styled } from '@linaria/react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLingui } from '@lingui/react/macro';
 import { Controller, useForm } from 'react-hook-form';
-import { IconApi, IconBrandGraphql } from 'twenty-ui/display';
+import { IconApi, IconBrandGraphql } from 'twenty-ui/icon';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { z } from 'zod';
@@ -19,9 +19,6 @@ const playgroundSetupFormSchema = z.object({
 
 type PlaygroundSetupFormValues = z.infer<typeof playgroundSetupFormSchema>;
 
-// Last column shrinks to the Launch button's content width so its right
-// edge sits at the form's right edge. The two select columns share the
-// remaining space equally.
 const StyledForm = styled.form`
   align-items: end;
   display: grid;

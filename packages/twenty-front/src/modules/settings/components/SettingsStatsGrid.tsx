@@ -1,20 +1,15 @@
 import { styled } from '@linaria/react';
 import { Fragment, useContext } from 'react';
-import { type IconComponent } from 'twenty-ui/display';
+import { type IconComponent } from 'twenty-ui/icon';
 import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 export type SettingsStatRow = {
   Icon: IconComponent;
   label: string;
-  // String so callers can render a placeholder (e.g. "—") while async counts
-  // are still loading. Layout stats just pass `count.toString()`.
   value: string;
 };
 
 type SettingsStatsGridProps = {
-  // Each inner array is one column rendered top-to-bottom; columns are
-  // separated by a vertical divider. Pass [[a, b], [c, d]] for a 2x2 layout
-  // or [[a, b, c]] for a single column.
   columns: SettingsStatRow[][];
 };
 

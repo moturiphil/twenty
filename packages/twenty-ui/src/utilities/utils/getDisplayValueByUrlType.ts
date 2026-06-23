@@ -1,5 +1,17 @@
 import { type LinkType } from '@ui/navigation';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined } from '@ui/utilities/utils/isDefined';
+
+// Instagram path segments that are app routes, not user handles
+const INSTAGRAM_RESERVED_PATHS = [
+  'p',
+  'reel',
+  'reels',
+  'explore',
+  'stories',
+  'tv',
+  'accounts',
+  'about',
+];
 
 type getUrlDisplayValueByUrlTypeProps = {
   type: LinkType;
@@ -38,6 +50,21 @@ export const getDisplayValueByUrlType = ({
       return decodeURIComponent(matches?.[1]);
     } else {
       return 'Facebook';
+    }
+  }
+
+  if (type === 'instagram') {
+    const matches = href.match(
+      /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([^/?#]+)/,
+    );
+    const handle = matches?.[1];
+    if (
+      isDefined(handle) &&
+      !INSTAGRAM_RESERVED_PATHS.includes(handle.toLowerCase())
+    ) {
+      return `@${decodeURIComponent(handle)}`;
+    } else {
+      return 'Instagram';
     }
   }
 };

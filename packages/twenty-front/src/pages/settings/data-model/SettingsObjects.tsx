@@ -3,19 +3,18 @@ import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilte
 import { SettingsDiscoveryHeroCard } from '@/settings/components/SettingsDiscoveryHeroCard';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/components/SubMenuTopBarContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
 import { useLingui } from '@lingui/react/macro';
-import { useMemo } from 'react';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
 import {
-  H2Title,
   IconEye,
   IconHierarchy2,
   IconLink,
   IconList,
   IconPlus,
-} from 'twenty-ui/display';
+} from 'twenty-ui/icon';
+import { H2Title } from 'twenty-ui/typography';
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
 import { UndecoratedLink } from 'twenty-ui/navigation';
@@ -31,32 +30,29 @@ export const SettingsObjects = () => {
   const { objectMetadataItems } = useFilteredObjectMetadataItems();
   const isDDLLocked = useAtomStateValue(isDDLLockedState);
 
-  const heroTabs = useMemo(
-    () => [
-      {
-        id: 'objects',
-        title: t`Objects`,
-        Icon: IconHierarchy2,
-        vimeoId: '926288174',
-      },
-      {
-        id: 'fields',
-        title: t`Fields`,
-        Icon: IconList,
-        vimeoId: '927628219',
-      },
-      {
-        id: 'relations',
-        title: t`Relations`,
-        Icon: IconLink,
-        vimeoId: '1185511827',
-      },
-    ],
-    [t],
-  );
+  const heroTabs = [
+    {
+      id: 'objects',
+      title: t`Objects`,
+      Icon: IconHierarchy2,
+      vimeoId: '926288174',
+    },
+    {
+      id: 'fields',
+      title: t`Fields`,
+      Icon: IconList,
+      vimeoId: '927628219',
+    },
+    {
+      id: 'relations',
+      title: t`Relations`,
+      Icon: IconLink,
+      vimeoId: '1185511827',
+    },
+  ];
 
   return (
-    <SubMenuTopBarContainer
+    <SettingsPageLayout
       title={t`Data model`}
       actionButton={
         isDDLLocked ? (
@@ -81,7 +77,7 @@ export const SettingsObjects = () => {
       links={[
         {
           children: t`Workspace`,
-          href: getSettingsPath(SettingsPath.Workspace),
+          href: getSettingsPath(SettingsPath.General),
         },
         { children: t`Objects` },
       ]}
@@ -112,12 +108,12 @@ export const SettingsObjects = () => {
             <Button
               title={t`Visualize`}
               variant="secondary"
-              size="small"
+              size="medium"
               Icon={IconEye}
             />
           </UndecoratedLink>
         </Section>
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };
