@@ -4,7 +4,11 @@ import { t } from '@lingui/core/macro';
 import { useStore } from 'jotai';
 import { useCallback } from 'react';
 import { type ExtendedUIMessage } from 'twenty-shared/ai';
-import { isDefined, isValidUuid } from 'twenty-shared/utils';
+import {
+  isDefined,
+  isValidUuid,
+  tipTapDocumentToMarkdown,
+} from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 
 import { AGENT_CHAT_INSTANCE_ID } from '@/ai/constants/AgentChatInstanceId';
@@ -16,6 +20,7 @@ import { SEND_CHAT_MESSAGE } from '@/ai/graphql/mutations/sendChatMessage';
 import { STOP_AGENT_CHAT_STREAM } from '@/ai/graphql/mutations/stopAgentChatStream';
 import { useAgentChatModelId } from '@/ai/hooks/useAgentChatModelId';
 import { useGetBrowsingContext } from '@/ai/hooks/useBrowsingContext';
+import { useProjectAiChatThreadToUrl } from '@/ai/hooks/useProjectAiChatThreadToUrl';
 import { useOptimisticallyUnarchiveOnSend } from '@/ai/hooks/useOptimisticallyUnarchiveOnSend';
 import { useWorkspaceAiModelAvailability } from '@/ai/hooks/useWorkspaceAiModelAvailability';
 import {
@@ -24,16 +29,24 @@ import {
 } from '@/ai/states/agentChatDraftsByThreadIdState';
 import { agentChatErrorComponentFamilyState } from '@/ai/states/agentChatErrorComponentFamilyState';
 import { agentChatInputState } from '@/ai/states/agentChatInputState';
+import { agentChatIsAwaitingFirstChunkComponentFamilyState } from '@/ai/states/agentChatIsAwaitingFirstChunkComponentFamilyState';
 import { agentChatLastSentBrowsingContextFamilyState } from '@/ai/states/agentChatLastSentBrowsingContextFamilyState';
 import { agentChatMessagesComponentFamilyState } from '@/ai/states/agentChatMessagesComponentFamilyState';
 import { agentChatSelectedFilesState } from '@/ai/states/agentChatSelectedFilesState';
 import { agentChatUploadedFilesState } from '@/ai/states/agentChatUploadedFilesState';
 import { currentAiChatThreadState } from '@/ai/states/currentAiChatThreadState';
+import { AiChatErrorCode } from '@/ai/utils/aiChatErrorCode';
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { useListenToBrowserEvent } from '@/browser-event/hooks/useListenToBrowserEvent';
 import { dispatchBrowserEvent } from '@/browser-event/utils/dispatchBrowserEvent';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import {
+  markWorkspaceCreditsAvailable,
+  markWorkspaceCreditsExhausted,
+} from '@/workspace/utils/updateWorkspaceResourceCreditCap';
+import { isGraphqlErrorOfType } from '~/utils/is-graphql-error-of-type.util';
 
 export const useAgentChat = (
   ensureThreadIdForSend: () => Promise<string | null>,
@@ -45,6 +58,7 @@ export const useAgentChat = (
   const apolloClient = useApolloClient();
   const { enqueueErrorSnackBar } = useSnackBar();
   const setCurrentAiChatThread = useSetAtomState(currentAiChatThreadState);
+  const { projectAiChatThreadToUrl } = useProjectAiChatThreadToUrl();
   const store = useStore();
 
   const setAgentChatUploadedFiles = useSetAtomState(
@@ -60,14 +74,11 @@ export const useAgentChat = (
     const draftKey =
       store.get(currentAiChatThreadState.atom) ??
       AGENT_CHAT_NEW_THREAD_DRAFT_KEY;
-    const contentToSend =
-      draftKey === AGENT_CHAT_NEW_THREAD_DRAFT_KEY
-        ? (
-            store.get(agentChatDraftsByThreadIdState.atom)[
-              AGENT_CHAT_NEW_THREAD_DRAFT_KEY
-            ] ?? store.get(agentChatInputState.atom)
-          ).trim()
-        : store.get(agentChatInputState.atom).trim();
+    const serializedContentToSend =
+      store.get(agentChatDraftsByThreadIdState.atom)[draftKey] ?? '';
+    const contentToSend = tipTapDocumentToMarkdown(
+      serializedContentToSend,
+    ).trim();
 
     if (contentToSend === '') {
       return;
@@ -97,6 +108,7 @@ export const useAgentChat = (
 
     if (draftKey === AGENT_CHAT_NEW_THREAD_DRAFT_KEY) {
       setCurrentAiChatThread(threadId);
+      projectAiChatThreadToUrl(threadId);
     }
 
     setAgentChatInput('');
@@ -145,11 +157,17 @@ export const useAgentChat = (
       instanceId: AGENT_CHAT_INSTANCE_ID,
       familyKey: { threadId },
     });
+    const isAwaitingFirstChunkAtom =
+      agentChatIsAwaitingFirstChunkComponentFamilyState.atomFamily({
+        instanceId: AGENT_CHAT_INSTANCE_ID,
+        familyKey: { threadId },
+      });
 
     const currentMessages = store.get(messagesAtom);
 
     store.set(messagesAtom, [...currentMessages, optimisticUserMessage]);
     store.set(errorAtom, null);
+    store.set(isAwaitingFirstChunkAtom, true);
 
     const fileAttachments = agentChatUploadedFiles.map((file) => ({
       id: file.fileId,
@@ -179,6 +197,19 @@ export const useAgentChat = (
         },
       });
 
+      // The stream this send started can exhaust the balance and publish
+      // credits-exhausted before this response resolves; that event marks the
+      // thread error, so its presence means the exhaustion is newer information
+      // than the gate pass this response proves.
+      if (
+        !isGraphqlErrorOfType(
+          store.get(errorAtom),
+          AiChatErrorCode.BILLING_CREDITS_EXHAUSTED,
+        )
+      ) {
+        store.set(currentWorkspaceState.atom, markWorkspaceCreditsAvailable);
+      }
+
       if (isBrowsingContextChanged) {
         store.set(lastSentBrowsingContextAtom, browsingContext);
       }
@@ -190,6 +221,7 @@ export const useAgentChat = (
           messagesAtom,
           latestMessages.filter((message) => message.id !== messageId),
         );
+        store.set(isAwaitingFirstChunkAtom, false);
       }
 
       dispatchBrowserEvent(AGENT_CHAT_REFETCH_MESSAGES_EVENT_NAME);
@@ -202,12 +234,15 @@ export const useAgentChat = (
       setAgentChatInput(contentToSend);
       setAgentChatDraftsByThreadId((prev) => ({
         ...prev,
-        [restoredDraftKey]: contentToSend,
+        [restoredDraftKey]: serializedContentToSend,
         ...(draftKey === AGENT_CHAT_NEW_THREAD_DRAFT_KEY
           ? { [AGENT_CHAT_NEW_THREAD_DRAFT_KEY]: '' }
           : {}),
       }));
-      setAgentChatUploadedFiles(uploadedFilesSnapshot);
+      setAgentChatUploadedFiles((currentUploadedFiles) => [
+        ...uploadedFilesSnapshot,
+        ...currentUploadedFiles,
+      ]);
 
       const latestMessages = store.get(messagesAtom);
 
@@ -216,6 +251,7 @@ export const useAgentChat = (
         latestMessages.filter((message) => message.id !== messageId),
       );
 
+      store.set(isAwaitingFirstChunkAtom, false);
       store.set(
         errorAtom,
         CombinedGraphQLErrors.is(error) || error instanceof Error
@@ -223,8 +259,14 @@ export const useAgentChat = (
           : new Error('An unexpected error occurred'),
       );
 
+      if (
+        isGraphqlErrorOfType(error, AiChatErrorCode.BILLING_CREDITS_EXHAUSTED)
+      ) {
+        store.set(currentWorkspaceState.atom, markWorkspaceCreditsExhausted);
+      }
+
       dispatchBrowserEvent(AGENT_CHAT_RESTORE_EDITOR_CONTENT_EVENT_NAME, {
-        content: contentToSend,
+        content: serializedContentToSend,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -254,6 +296,14 @@ export const useAgentChat = (
     if (!isDefined(threadId) || !isValidUuid(threadId)) {
       return;
     }
+
+    store.set(
+      agentChatIsAwaitingFirstChunkComponentFamilyState.atomFamily({
+        instanceId: AGENT_CHAT_INSTANCE_ID,
+        familyKey: { threadId },
+      }),
+      false,
+    );
 
     try {
       await apolloClient.mutate({

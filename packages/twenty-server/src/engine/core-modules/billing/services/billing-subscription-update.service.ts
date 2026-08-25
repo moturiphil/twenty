@@ -15,11 +15,11 @@ import type Stripe from 'stripe';
 
 import { billingValidator } from 'src/engine/core-modules/billing/billing.validate';
 import { BillingPriceEntity } from 'src/engine/core-modules/billing/entities/billing-price.entity';
-import { BillingSubscriptionItemEntity } from 'src/engine/core-modules/billing/entities/billing-subscription-item.entity';
 import { BillingSubscriptionEntity } from 'src/engine/core-modules/billing/entities/billing-subscription.entity';
 import { BillingPlanKey } from 'src/engine/core-modules/billing/enums/billing-plan-key.enum';
 import { BillingProductKey } from 'src/engine/core-modules/billing/enums/billing-product-key.enum';
 import { SubscriptionInterval } from 'src/engine/core-modules/billing/enums/billing-subscription-interval.enum';
+import { SubscriptionStatus } from 'src/engine/core-modules/billing/enums/billing-subscription-status.enum';
 import { BillingPriceService } from 'src/engine/core-modules/billing/services/billing-price.service';
 import { BillingProductService } from 'src/engine/core-modules/billing/services/billing-product.service';
 import { BillingSubscriptionPhaseService } from 'src/engine/core-modules/billing/services/billing-subscription-phase.service';
@@ -56,8 +56,6 @@ export class BillingSubscriptionUpdateService {
     private readonly billingProductService: BillingProductService,
     @InjectRepository(BillingPriceEntity)
     private readonly billingPriceRepository: Repository<BillingPriceEntity>,
-    @InjectRepository(BillingSubscriptionItemEntity)
-    private readonly billingSubscriptionItemRepository: Repository<BillingSubscriptionItemEntity>,
     @InjectWorkspaceScopedRepository(BillingSubscriptionEntity)
     private readonly billingSubscriptionRepository: WorkspaceScopedRepository<BillingSubscriptionEntity>,
     private readonly stripeSubscriptionScheduleService: StripeSubscriptionScheduleService,
@@ -272,7 +270,10 @@ export class BillingSubscriptionUpdateService {
     } else {
       const subscriptionOptions = computeSubscriptionUpdateOptions(
         subscriptionUpdate,
-        { currentSeats: licensedItem.quantity },
+        {
+          currentSeats: licensedItem.quantity,
+          isTrialing: subscription.status === SubscriptionStatus.Trialing,
+        },
       );
 
       if (
@@ -296,13 +297,6 @@ export class BillingSubscriptionUpdateService {
         seats: toUpdateCurrentPrices.seats,
         ...subscriptionOptions,
       });
-
-      if (subscriptionUpdate.type !== SubscriptionUpdateType.SEATS) {
-        await this.billingSubscriptionItemRepository.update(
-          { stripeSubscriptionId: subscription.stripeSubscriptionId },
-          { hasReachedCurrentPeriodCap: false },
-        );
-      }
 
       if (isDefined(nextPhase)) {
         assertIsDefinedOrThrow(schedule);
@@ -525,6 +519,14 @@ export class BillingSubscriptionUpdateService {
     subscription: BillingSubscriptionEntity,
     update: SubscriptionUpdate,
   ): Promise<boolean> {
+    if (
+      subscription.status === SubscriptionStatus.Trialing &&
+      (update.type === SubscriptionUpdateType.INTERVAL ||
+        update.type === SubscriptionUpdateType.PLAN)
+    ) {
+      return false;
+    }
+
     switch (update.type) {
       case SubscriptionUpdateType.PLAN: {
         const currentPlan =

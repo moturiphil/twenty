@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import {
   DeleteLayerVersionCommand,
   type GetFunctionCommandOutput,
+  InvalidParameterValueException,
   ListLayerVersionsCommand,
   PublishLayerVersionCommand,
   ResourceNotFoundException,
@@ -22,6 +23,10 @@ import { TemporaryDirManager } from 'src/engine/core-modules/logic-function/logi
 import { type LogicFunctionResourceService } from 'src/engine/core-modules/logic-function/logic-function-resource/logic-function-resource.service';
 import { type SdkClientArchiveService } from 'src/engine/core-modules/sdk-client/sdk-client-archive.service';
 import { LogicFunctionRuntime } from 'src/engine/metadata-modules/logic-function/logic-function.entity';
+import {
+  LogicFunctionException,
+  LogicFunctionExceptionCode,
+} from 'src/engine/metadata-modules/logic-function/logic-function.exception';
 
 type LayerAppContext = {
   flatApplication: FlatApplication;
@@ -32,7 +37,10 @@ export class LambdaLayerManagerService {
   private readonly logger = new Logger(LambdaLayerManagerService.name);
 
   constructor(
-    private readonly options: Pick<LambdaDriverOptions, 'layerBucket'>,
+    private readonly options: Pick<
+      LambdaDriverOptions,
+      'layerBucket' | 'resourceNamespace'
+    >,
     private readonly awsClient: LambdaAwsClientService,
     private readonly toolFunctions: LambdaToolFunctionsService,
     private readonly logicFunctionResourceService: LogicFunctionResourceService,
@@ -40,7 +48,10 @@ export class LambdaLayerManagerService {
   ) {}
 
   async ensureDepsLayer(context: LayerAppContext): Promise<string> {
-    const layerName = getLambdaDepsLayerName(context.flatApplication);
+    const layerName = getLambdaDepsLayerName({
+      flatApplication: context.flatApplication,
+      namespace: this.options.resourceNamespace,
+    });
 
     const existingArn = await this.awsClient.getExistingLayerArn(layerName);
 
@@ -128,7 +139,10 @@ export class LambdaLayerManagerService {
       return false;
     }
 
-    const depsLayerName = getLambdaDepsLayerName(flatApplication);
+    const depsLayerName = getLambdaDepsLayerName({
+      flatApplication,
+      namespace: this.options.resourceNamespace,
+    });
     const sdkLayerName = getLambdaSdkLayerName({
       workspaceId: flatApplication.workspaceId,
       applicationUniversalIdentifier,
@@ -167,19 +181,36 @@ export class LambdaLayerManagerService {
     });
 
     const lambdaClient = await this.awsClient.getLambdaClient();
-    const publishResult = await lambdaClient.send(
-      new PublishLayerVersionCommand({
-        LayerName: layerName,
-        Content: {
-          S3Bucket: this.options.layerBucket,
-          S3Key: s3Key,
-        },
-        CompatibleRuntimes: [
-          LogicFunctionRuntime.NODE18,
-          LogicFunctionRuntime.NODE22,
-        ],
-      }),
-    );
+
+    let publishResult;
+
+    try {
+      publishResult = await lambdaClient.send(
+        new PublishLayerVersionCommand({
+          LayerName: layerName,
+          Content: {
+            S3Bucket: this.options.layerBucket,
+            S3Key: s3Key,
+          },
+          CompatibleRuntimes: [
+            LogicFunctionRuntime.NODE18,
+            LogicFunctionRuntime.NODE22,
+          ],
+        }),
+      );
+    } catch (error) {
+      if (
+        error instanceof InvalidParameterValueException &&
+        error.message.toLowerCase().includes('size')
+      ) {
+        throw new LogicFunctionException(
+          `Dependency layer '${layerName}' exceeds the Lambda layer size limit: ${error.message}`,
+          LogicFunctionExceptionCode.LOGIC_FUNCTION_DEPENDENCIES_SIZE_EXCEEDED,
+        );
+      }
+
+      throw error;
+    }
 
     if (!publishResult.LayerVersionArn) {
       throw new Error(

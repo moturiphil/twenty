@@ -6,9 +6,9 @@ import { getCommunityStats } from '@/platform/community';
 import { getRouteI18n } from '@/platform/i18n/get-route-i18n';
 import { getServerI18n } from '@/platform/i18n/get-server-i18n';
 import { resolveLocaleParam } from '@/platform/i18n/resolve-locale-param';
-import { fetchLiveMarketplacePartners } from '@/partners-marketplace/fetch-live-marketplace-partners';
-import { getMarketplacePartnerBySlug } from '@/partners-marketplace/get-marketplace-partner-by-slug';
+import { getMarketplacePartnerBySlug } from '@/partners-marketplace/marketplace-partners-source';
 import { PartnerProfile } from '@/partners-marketplace/PartnerProfile';
+import { richTextExcerpt } from '@/partners-marketplace/rich-text-excerpt';
 import { buildBreadcrumbListJsonLd, JsonLd } from '@/platform/seo';
 import { Menu } from '@/sections/menu';
 
@@ -17,17 +17,6 @@ type PartnerProfileParams = { locale: string; slug: string };
 export const dynamic = 'force-dynamic';
 
 export const dynamicParams = true;
-
-export async function generateStaticParams(): Promise<Array<{ slug: string }>> {
-  const partners = await fetchLiveMarketplacePartners();
-  return partners.map((partner) => ({ slug: partner.slug }));
-}
-
-// Collapse whitespace and cap to a meta-description length.
-const truncateDescription = (text: string, max = 160): string => {
-  const cleaned = text.replace(/\s+/g, ' ').trim();
-  return cleaned.length <= max ? cleaned : `${cleaned.slice(0, max - 1)}…`;
-};
 
 export async function generateMetadata({
   params,
@@ -43,7 +32,7 @@ export async function generateMetadata({
   }
   return {
     title: i18n._(msg`${partner.name} — Twenty Partner`),
-    description: truncateDescription(partner.introduction),
+    description: richTextExcerpt(partner.description, 160),
   };
 }
 
@@ -70,7 +59,6 @@ export default async function PartnerProfilePage({
           [
             { name: 'Home', path: '/' },
             { name: 'Partners', path: '/partners' },
-            { name: 'Marketplace', path: '/partners/list' },
             { name: partner.name, path: `/partners/profile/${partner.slug}` },
           ],
           locale,

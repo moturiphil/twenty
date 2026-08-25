@@ -1,4 +1,5 @@
 import { CurrentApplicationContext } from '@/applications/contexts/CurrentApplicationContext';
+import { AppChip } from '@/applications/components/AppChip';
 import { useResolvedApplicationDescription } from '@/applications/hooks/useResolvedApplicationDescription';
 import { isTwentyStandardApplication } from '@/applications/utils/isTwentyStandardApplication';
 import { isWorkspaceCustomApplication } from '@/applications/utils/isWorkspaceCustomApplication';
@@ -21,7 +22,9 @@ import { useParams } from 'react-router-dom';
 import { type Manifest } from 'twenty-shared/application';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+import { InlineBanner } from 'twenty-ui/feedback';
 import {
+  IconAlertTriangle,
   IconBox,
   IconCommand,
   IconGraph,
@@ -32,12 +35,14 @@ import {
   IconSettings,
 } from 'twenty-ui/icon';
 import {
-  ApplicationRegistrationSourceType,
   FindMarketplaceAppDetailDocument,
+  FindMarketplaceAppManifestDocument,
   FindOneApplicationDocument,
+  IsApplicationStoppedDocument,
   PermissionFlagType,
   UninstallApplicationDocument,
 } from '~/generated-metadata/graphql';
+import { isUpgradableApplicationSourceType } from '~/pages/settings/applications/utils/isUpgradableApplicationSourceType';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 import { SettingsSectionSkeletonLoader } from '@/settings/components/SettingsSectionSkeletonLoader';
 import { CUSTOM_APPLICATION_ILLUSTRATIONS } from '~/pages/settings/applications/constants/CustomApplicationIllustrations';
@@ -48,6 +53,7 @@ import { SettingsApplicationDetailContentTab } from '~/pages/settings/applicatio
 import { SettingsApplicationDetailSettingsTab } from '~/pages/settings/applications/tabs/SettingsApplicationDetailSettingsTab';
 import { SettingsApplicationPermissionsTab } from '~/pages/settings/applications/tabs/SettingsApplicationPermissionsTab';
 import { applicationHasHttpTriggeredFunctions } from '~/pages/settings/applications/utils/applicationHasHttpTriggeredFunctions';
+import { getDisplayedApplicationVariables } from '~/pages/settings/applications/utils/getDisplayedApplicationVariables';
 import { isNewerSemver } from '~/pages/settings/applications/utils/isNewerSemver';
 
 const APPLICATION_DETAIL_ID = 'application-detail-id';
@@ -75,9 +81,30 @@ export const SettingsApplicationDetails = () => {
     skip: !application?.universalIdentifier,
   });
 
+  const { data: manifestData } = useQuery(FindMarketplaceAppManifestDocument, {
+    variables: { universalIdentifier: application?.universalIdentifier ?? '' },
+    skip: !application?.universalIdentifier,
+  });
+
+  const { data: isApplicationStoppedData } = useQuery(
+    IsApplicationStoppedDocument,
+    {
+      variables: {
+        applicationUniversalIdentifier: application?.universalIdentifier ?? '',
+      },
+      skip: !application?.universalIdentifier,
+      // The kill switch is toggled server-side, a cached value would hide it.
+      fetchPolicy: 'network-only',
+    },
+  );
+
+  const isApplicationStopped =
+    isApplicationStoppedData?.isApplicationStopped === true;
+
   const detail = detailData?.findMarketplaceAppDetail;
-  const manifest = detail?.manifest as Manifest | undefined;
-  const app = manifest?.application;
+  const manifest = manifestData?.findMarketplaceAppDetail?.manifest as
+    | Manifest
+    | undefined;
   const currentWorkspace = useAtomStateValue(currentWorkspaceState);
   const isStandardApplication = isTwentyStandardApplication(application);
   const isCustomApplication = isWorkspaceCustomApplication(
@@ -88,11 +115,11 @@ export const SettingsApplicationDetails = () => {
   const resolvedDescription = useResolvedApplicationDescription(application);
 
   const displayName =
-    app?.displayName ?? application?.name ?? t`Application details`;
-  const description = app?.description ?? resolvedDescription;
+    detail?.name ?? application?.name ?? t`Application details`;
+  const description = detail?.description ?? resolvedDescription;
 
   const getScreenshots = () => {
-    if (app?.screenshots?.length) return app.screenshots;
+    if (detail?.galleryImages?.length) return detail.galleryImages;
     if (isStandardApplication) return STANDARD_APPLICATION_ILLUSTRATIONS;
     if (isCustomApplication) return CUSTOM_APPLICATION_ILLUSTRATIONS;
     return undefined;
@@ -103,11 +130,10 @@ export const SettingsApplicationDetails = () => {
   const { upgrade, isUpgrading } = useUpgradeApplication();
 
   const canInstallMarketplaceApps = useHasPermissionFlag(
-    PermissionFlagType.MARKETPLACE_APPS,
+    PermissionFlagType.APPLICATIONS,
   );
 
   const sourceType = application?.applicationRegistration?.sourceType;
-  const isNpmApp = sourceType === ApplicationRegistrationSourceType.NPM;
   const registrationId = detail?.id ?? application?.applicationRegistration?.id;
   const currentVersion = application?.version;
   const latestAvailableVersion =
@@ -115,7 +141,7 @@ export const SettingsApplicationDetails = () => {
     application?.applicationRegistration?.latestAvailableVersion;
 
   const hasUpdate =
-    isNpmApp &&
+    isUpgradableApplicationSourceType(sourceType) &&
     isDefined(latestAvailableVersion) &&
     isDefined(currentVersion) &&
     isNewerSemver(latestAvailableVersion, currentVersion);
@@ -222,13 +248,23 @@ export const SettingsApplicationDetails = () => {
       disabled: !isDefined(application?.defaultRoleId),
     },
     (() => {
-      const hasVariables = (application?.applicationVariables ?? []).length > 0;
+      const hasVariables =
+        getDisplayedApplicationVariables(
+          application?.applicationVariables ?? [],
+        ).length > 0;
       const hasConnectionProviders = connectionProviders.length > 0;
       const hasHttpTriggeredFunctions =
         applicationHasHttpTriggeredFunctions(application);
       const canShowFunctionDomain = hasHttpTriggeredFunctions;
+      const hasSettingsFrontComponent = isDefined(
+        application?.settingsCustomTabFrontComponentId,
+      );
       const hasNothingToConfigure =
-        !hasVariables && !hasConnectionProviders && !canShowFunctionDomain;
+        !hasVariables &&
+        !hasConnectionProviders &&
+        !canShowFunctionDomain &&
+        !hasSettingsFrontComponent &&
+        !isUpgradableApplicationSourceType(sourceType);
 
       return {
         id: 'settings',
@@ -253,20 +289,20 @@ export const SettingsApplicationDetails = () => {
           <SettingsApplicationDetailAboutTab
             displayName={displayName}
             description={description}
-            aboutDescription={app?.aboutDescription}
+            aboutDescription={detail?.aboutDescription ?? undefined}
             screenshots={screenshots}
-            author={app?.author}
-            category={app?.category}
+            author={detail?.author ?? undefined}
+            category={detail?.category ?? undefined}
             contentEntries={contentEntries}
             currentVersion={currentVersion ?? undefined}
             latestAvailableVersion={latestAvailableVersion ?? undefined}
             developerLinks={
-              isDefined(app)
+              isDefined(detail)
                 ? {
-                    websiteUrl: app.websiteUrl,
-                    termsUrl: app.termsUrl,
-                    emailSupport: app.emailSupport,
-                    issueReportUrl: app.issueReportUrl,
+                    websiteUrl: detail.websiteUrl ?? undefined,
+                    termsUrl: detail.termsUrl ?? undefined,
+                    emailSupport: detail.emailSupport ?? undefined,
+                    issueReportUrl: detail.issueReportUrl ?? undefined,
                   }
                 : undefined
             }
@@ -289,7 +325,7 @@ export const SettingsApplicationDetails = () => {
             applicationInfo={{
               id: application.id,
               name: displayName,
-              logo: application.logo,
+              logoUrl: application.logoUrl,
               universalIdentifier: application.universalIdentifier,
             }}
           />
@@ -313,6 +349,19 @@ export const SettingsApplicationDetails = () => {
     <CurrentApplicationContext.Provider value={application?.id ?? null}>
       <SettingsPageLayout
         title={displayName}
+        icon={
+          isDefined(application) ? (
+            <AppChip
+              applicationId={application.id}
+              logoUrl={application.logoUrl}
+              fallbackApplicationData={{
+                name: displayName,
+              }}
+              size="md"
+              chipOnly
+            />
+          ) : undefined
+        }
         links={[
           {
             children: t`Workspace`,
@@ -326,6 +375,13 @@ export const SettingsApplicationDetails = () => {
         ]}
       >
         <SettingsPageContainer>
+          {isApplicationStopped && (
+            <InlineBanner
+              color="danger"
+              LeftIcon={IconAlertTriangle}
+              message={t`We are currently encountering issues with this app, its behavior may be degraded while we work on a fix.`}
+            />
+          )}
           <TabList tabs={tabs} componentInstanceId={APPLICATION_DETAIL_ID} />
           {renderActiveTabContent()}
         </SettingsPageContainer>

@@ -4,7 +4,7 @@ import { RoundedLink, SocialLink } from 'twenty-ui/navigation';
 import { checkUrlType } from '~/utils/checkUrlType';
 import { isSocialLinkType } from '~/utils/isSocialLinkType';
 import { getSafeUrl } from 'twenty-shared/utils';
-import { EllipsisDisplay } from './EllipsisDisplay';
+import { EllipsisDisplay } from 'twenty-ui/data-display';
 
 type URLDisplayProps = {
   value: string | null;
@@ -28,7 +28,7 @@ export const URLDisplay = ({ value }: URLDisplayProps) => {
           href={absoluteUrl}
           onClick={handleClick}
           type={type}
-          label={displayedValue}
+          label={null}
         />
       </EllipsisDisplay>
     );

@@ -1,4 +1,6 @@
 import { ApiService } from '@/cli/utilities/api/api-service';
+import { buildAppTokenPairFetcher } from '@/cli/utilities/auth/build-app-token-pair-fetcher';
+import { type AppTokenSources } from '@/cli/utilities/auth/ensure-app-access-token-is-valid-or-refresh';
 import { ClientService } from '@/cli/utilities/client/client-service';
 import { ConfigService } from '@/cli/utilities/config/config-service';
 import { type OrchestratorState } from '@/cli/utilities/dev/orchestrator/dev-mode-orchestrator-state';
@@ -21,6 +23,9 @@ export type DevModeOrchestratorOptions = {
   state: OrchestratorState;
   debounceMs?: number;
   verbose?: boolean;
+  force?: boolean;
+  interactive?: boolean;
+  onExit?: (params: { code: number; message: string }) => void;
 };
 
 export class DevModeOrchestrator {
@@ -28,6 +33,8 @@ export class DevModeOrchestrator {
   private debounceMs: number;
   private syncTimer: NodeJS.Timeout | null = null;
   private serverCheckInterval: NodeJS.Timeout | null = null;
+  private syncRequestedWhileRunning = false;
+  private isClosed = false;
 
   private apiService: ApiService;
   private clientService: ClientService;
@@ -75,6 +82,9 @@ export class DevModeOrchestrator {
       ...stepDeps,
       apiService,
       verbose: this.verbose,
+      force: options.force ?? false,
+      interactive: options.interactive ?? false,
+      onExit: options.onExit,
     });
     this.startWatchersStep = new StartWatchersOrchestratorStep({
       ...stepDeps,
@@ -86,6 +96,8 @@ export class DevModeOrchestrator {
   }
 
   async start(): Promise<void> {
+    this.isClosed = false;
+
     const outputDir = path.join(this.state.appPath, OUTPUT_DIR);
 
     await ensureDir(outputDir);
@@ -113,8 +125,16 @@ export class DevModeOrchestrator {
   }
 
   async close(): Promise<void> {
+    this.isClosed = true;
+
+    if (this.syncTimer) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
+    }
+
     if (this.serverCheckInterval) {
       clearInterval(this.serverCheckInterval);
+      this.serverCheckInterval = null;
     }
 
     await this.startWatchersStep.close();
@@ -144,6 +164,10 @@ export class DevModeOrchestrator {
   }
 
   private scheduleSync(): void {
+    if (this.isClosed) {
+      return;
+    }
+
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
     }
@@ -156,6 +180,7 @@ export class DevModeOrchestrator {
 
   private async performSync(): Promise<void> {
     if (this.state.pipeline.isSyncing) {
+      this.syncRequestedWhileRunning = true;
       return;
     }
 
@@ -172,6 +197,11 @@ export class DevModeOrchestrator {
       this.state.updateAllEntitiesStatus('error');
     } finally {
       this.state.updatePipeline({ isSyncing: false });
+
+      if (this.syncRequestedWhileRunning && !this.isClosed) {
+        this.syncRequestedWhileRunning = false;
+        this.scheduleSync();
+      }
     }
   }
 
@@ -214,18 +244,36 @@ export class DevModeOrchestrator {
       appPath: this.state.appPath,
     });
 
-    if (this.state.steps.syncApplication.status === 'error') {
+    if (this.state.steps.syncApplication.output.syncStatus !== 'synced') {
       return;
     }
 
     if (objectsOrFieldsChanged) {
       await this.generateApiClientStep.execute({
         appPath: this.state.appPath,
-        credentials: this.registerAppStep.registrationCredentials,
+        tokenSources: this.buildAppTokenSources(),
       });
 
       this.skipTypecheck = false;
     }
+  }
+
+  private buildAppTokenSources(): AppTokenSources {
+    const credentials = this.registerAppStep.registrationCredentials;
+    const applicationId =
+      this.state.steps.resolveApplication.output.applicationId;
+
+    return {
+      credentials: credentials?.clientSecret
+        ? {
+            clientId: credentials.clientId,
+            clientSecret: credentials.clientSecret,
+          }
+        : undefined,
+      fetchTokenPair: applicationId
+        ? buildAppTokenPairFetcher(this.apiService, applicationId)
+        : undefined,
+    };
   }
 
   private async initializePipeline(manifest: Manifest): Promise<boolean> {

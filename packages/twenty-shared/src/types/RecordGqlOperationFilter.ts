@@ -43,6 +43,10 @@ export type RatingFilter = {
   eq?: string;
   in?: string[];
   is?: IsFilter;
+  gt?: string;
+  gte?: string;
+  lt?: string;
+  lte?: string;
 };
 
 export type FloatFilter = {
@@ -130,6 +134,10 @@ export type SelectFilter = {
   in?: string[];
   eq?: string;
   neq?: string;
+  gt?: string;
+  gte?: string;
+  lt?: string;
+  lte?: string;
 };
 
 export type MultiSelectFilter = {
@@ -180,6 +188,7 @@ export type LeafFilter =
   | AddressFilter
   | LinksFilter
   | ActorFilter
+  | EmailsFilter
   | PhonesFilter
   | ArrayFilter
   | RawJsonFilter

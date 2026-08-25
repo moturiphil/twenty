@@ -1,12 +1,16 @@
 import { SidePanelBackButton } from '@/side-panel/components/SidePanelBackButton';
+import { SidePanelCloseButton } from '@/side-panel/components/SidePanelCloseButton';
 import { SidePanelPageInfo } from '@/side-panel/components/SidePanelPageInfo';
+import { SidePanelTopBarEscapeHotkeyEffect } from '@/side-panel/components/SidePanelTopBarEscapeHotkeyEffect';
 import { SidePanelTopBarInputFocusEffect } from '@/side-panel/components/SidePanelTopBarInputFocusEffect';
+import { SidePanelExpandButton } from '@/side-panel/components/SidePanelExpandButton';
 import { SidePanelTopBarRightCornerIcon } from '@/side-panel/components/SidePanelTopBarRightCornerIcon';
 import { COMMAND_MENU_SIDE_PANEL_PAGES } from '@/side-panel/constants/CommandMenuSidePanelPages';
+import { SIDE_PANEL_FOCUS_ID } from '@/side-panel/constants/SidePanelFocusId';
 import { SIDE_PANEL_TOP_BAR_HEIGHT } from '@/side-panel/constants/SidePanelTopBarHeight';
 import { SIDE_PANEL_TOP_BAR_HEIGHT_MOBILE } from '@/side-panel/constants/SidePanelTopBarHeightMobile';
-import { SIDE_PANEL_FOCUS_ID } from '@/side-panel/constants/SidePanelFocusId';
-import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
+import { useHandleSidePanelBackspace } from '@/side-panel/hooks/useHandleSidePanelBackspace';
+import { useHandleSidePanelEscape } from '@/side-panel/hooks/useHandleSidePanelEscape';
 import { useSidePanelContextChips } from '@/side-panel/hooks/useSidePanelContextChips';
 import { sidePanelNavigationStackState } from '@/side-panel/states/sidePanelNavigationStackState';
 import { sidePanelPageState } from '@/side-panel/states/sidePanelPageState';
@@ -20,8 +24,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useContext, useRef } from 'react';
-import { IconX } from 'twenty-ui/icon';
-import { IconButton } from 'twenty-ui/input';
+import { Key } from 'ts-key-enum';
 import { useIsMobile } from 'twenty-ui/utilities';
 import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
@@ -95,8 +98,6 @@ export const SidePanelTopBar = () => {
 
   const isMobile = useIsMobile();
 
-  const { closeSidePanelMenu } = useSidePanelMenu();
-
   const sidePanelPage = useAtomStateValue(sidePanelPageState);
 
   const sidePanelNavigationStack = useAtomStateValue(
@@ -110,6 +111,8 @@ export const SidePanelTopBar = () => {
   const { pushFocusItemToFocusStack } = usePushFocusItemToFocusStack();
   const { removeFocusItemFromFocusStackById } =
     useRemoveFocusItemFromFocusStackById();
+  const handleSidePanelBackspace = useHandleSidePanelBackspace();
+  const handleSidePanelEscape = useHandleSidePanelEscape();
 
   const handleInputFocus = () => {
     pushFocusItemToFocusStack({
@@ -130,6 +133,34 @@ export const SidePanelTopBar = () => {
     });
   };
 
+  const handleInputKeyDownCapture = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
+
+    if (event.key === Key.Escape) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
+
+      handleSidePanelEscape();
+      return;
+    }
+
+    if (
+      event.key === Key.Backspace &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      handleSidePanelBackspace()
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
+    }
+  };
+
   const currentPage = sidePanelNavigationStack.at(-1)?.page;
   const previousPage = sidePanelNavigationStack.at(-2)?.page;
 
@@ -148,6 +179,10 @@ export const SidePanelTopBar = () => {
 
   return (
     <StyledInputContainer isMobile={isMobile}>
+      <SidePanelTopBarEscapeHotkeyEffect
+        inputRef={inputRef}
+        onEscape={handleSidePanelEscape}
+      />
       <StyledContentContainer>
         <AnimatePresence>
           {shouldShowBackButton && (
@@ -173,6 +208,7 @@ export const SidePanelTopBar = () => {
               value={sidePanelSearch}
               placeholder={t`Type anything...`}
               onChange={handleSearchChange}
+              onKeyDownCapture={handleInputKeyDownCapture}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
             />
@@ -182,15 +218,8 @@ export const SidePanelTopBar = () => {
       </StyledContentContainer>
       <StyledRightControlsContainer>
         <SidePanelTopBarRightCornerIcon />
-        {!shouldHideCloseButton && (
-          <IconButton
-            Icon={IconX}
-            size="small"
-            variant="secondary"
-            onClick={closeSidePanelMenu}
-            ariaLabel={t`Close side panel`}
-          />
-        )}
+        <SidePanelExpandButton />
+        {shouldHideCloseButton ? null : <SidePanelCloseButton />}
       </StyledRightControlsContainer>
     </StyledInputContainer>
   );

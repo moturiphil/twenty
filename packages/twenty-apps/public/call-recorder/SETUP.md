@@ -17,6 +17,12 @@ and to receive recordings back. Two things must be configured:
 2. A **webhook** from Recall.ai back to your deployment, so the app learns when
    a recording is ready and can ingest it.
 
+Transcription runs on Recall.ai's own provider by default, which needs no extra
+credentials. If a workspace switches `CALL_RECORDER_TRANSCRIPT_PROVIDER` to
+Gladia, add a **Gladia API key** in the Recall.ai dashboard
+(**Transcription → Gladia**) for every region in use, or transcripts for that
+workspace fail.
+
 ## Server variables
 
 Set these on the application registration after installing
@@ -30,9 +36,10 @@ Set these on the application registration after installing
 | `RECALL_WEBHOOK_SECRET` | Yes | Svix signing secret (`whsec_…`) used to verify incoming Recall webhooks. |
 
 > **Bot behavior settings** (display name, join timing, lobby and leave
-> timeouts) are **application variables** that a workspace admin tunes inside the
-> app — not server variables. See **Customize the bot** in the
-> [README](./README.md).
+> timeouts), the transcription provider (`CALL_RECORDER_TRANSCRIPT_PROVIDER`)
+> and the summary settings (`CALL_RECORDER_SUMMARY_ENABLED`,
+> `CALL_RECORDER_ADDITIONAL_SUMMARY_PROMPT`) are **application variables**
+> that a workspace admin tunes inside the app — not server variables.
 
 ## Configuring the Recall webhook
 
@@ -93,3 +100,5 @@ webhook update is missed.
 | Webhook rejected with `500` (`RECALL_WEBHOOK_SECRET … not set`) | `RECALL_WEBHOOK_SECRET` is not set | Set it on the application registration |
 | Bot left almost immediately | No one was admitted before the lobby / empty-meeting timeout, or everyone left | Adjust the lobby / empty-meeting timeouts in the app settings (see **Customize the bot** in the README) if they're too aggressive |
 | Bot joined a meeting you didn't want recorded | Recording is on by default | Set the event's **Recording** field to Off; the scheduled bot is canceled |
+| Summary stays empty after the transcript arrives | Summaries are disabled, or the summarizer run failed (for example, out of AI credits) | Confirm `CALL_RECORDER_SUMMARY_ENABLED` isn't `false` and the workspace has AI credits |
+| Summary shows "No summary available." | The transcript was empty or unintelligible | No action needed; this is the expected outcome for low-quality transcripts |

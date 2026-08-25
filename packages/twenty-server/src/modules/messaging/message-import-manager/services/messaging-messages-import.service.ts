@@ -13,7 +13,7 @@ import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.ent
 import { type ConnectedAccountEntity } from 'src/engine/metadata-modules/connected-account/entities/connected-account.entity';
 import { MessageChannelEntity } from 'src/engine/metadata-modules/message-channel/entities/message-channel.entity';
 import { InjectObjectMetadataRepository } from 'src/engine/object-metadata-repository/object-metadata-repository.decorator';
-import { GlobalWorkspaceOrmManager } from 'src/engine/twenty-orm/global-workspace-datasource/global-workspace-orm.manager';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
 import { BlocklistRepository } from 'src/modules/blocklist/repositories/blocklist.repository';
 import { BlocklistWorkspaceEntity } from 'src/modules/blocklist/standard-objects/blocklist.workspace-entity';
@@ -47,7 +47,7 @@ export class MessagingMessagesImportService {
     @InjectObjectMetadataRepository(BlocklistWorkspaceEntity)
     private readonly blocklistRepository: BlocklistRepository,
     private readonly emailAliasManagerService: EmailAliasManagerService,
-    private readonly globalWorkspaceOrmManager: GlobalWorkspaceOrmManager,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
     @InjectRepository(MessageChannelEntity)
     private readonly messageChannelRepository: Repository<MessageChannelEntity>,
     private readonly messagingGetMessagesService: MessagingGetMessagesService,
@@ -63,16 +63,17 @@ export class MessagingMessagesImportService {
     messageChannel: MessageChannelEntity,
     connectedAccount: ConnectedAccountEntity,
     workspaceId: string,
+    batchSize?: number,
   ) {
     let messageIdsToFetch: string[] = [];
 
-    const messagesGetBatchSize = this.twentyConfigService.get(
-      'MESSAGING_MESSAGES_GET_BATCH_SIZE',
-    );
+    const messagesGetBatchSize =
+      batchSize ??
+      this.twentyConfigService.get('MESSAGING_MESSAGES_GET_BATCH_SIZE');
 
     const authContext = buildSystemAuthContext(workspaceId);
 
-    await this.globalWorkspaceOrmManager.executeInWorkspaceContext(
+    await this.workspaceOrmManager.executeInWorkspaceContext(
       async () => {
         try {
           if (
@@ -126,7 +127,6 @@ export class MessagingMessagesImportService {
               messageChannel,
             );
 
-          // Map external folder IDs to internal folder IDs
           const messageFolders = messageChannel.messageFolders ?? [];
           const foldersWithExternalId = messageFolders.filter(
             (folder): folder is typeof folder & { externalId: string } =>
@@ -155,8 +155,7 @@ export class MessagingMessagesImportService {
           });
 
           const workspaceMemberRepository =
-            await this.globalWorkspaceOrmManager.getRepository<WorkspaceMemberWorkspaceEntity>(
-              workspaceId,
+            this.workspaceOrmManager.getRepository<WorkspaceMemberWorkspaceEntity>(
               'workspaceMember',
               { shouldBypassPermissionChecks: true },
             );

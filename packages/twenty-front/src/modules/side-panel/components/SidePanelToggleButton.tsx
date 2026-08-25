@@ -13,7 +13,7 @@ import { t } from '@lingui/core/macro';
 import { IconDotsVertical } from 'twenty-ui/icon';
 import { IconButton } from 'twenty-ui/input';
 import { AppTooltip, TooltipDelay, TooltipPosition } from 'twenty-ui/surfaces';
-import { useIsMobile } from 'twenty-ui/utilities';
+import { getOsControlSymbol, useIsMobile } from 'twenty-ui/utilities';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledButtonWrapper = styled.div<{ alignToTop: boolean }>`
@@ -55,15 +55,20 @@ export const SidePanelToggleButton = () => {
     ({ page }) => COMMAND_MENU_SIDE_PANEL_PAGES.includes(page),
   );
 
+  const isCoveredBySidePanelOnMobile =
+    isMobile && isSidePanelOpened && !alignWithSidePanelTopBar;
+
   const shouldHideButton =
     isCommandMenuOpened ||
-    (isSidePanelOpened && hasCommandMenuPageInNavigationStack);
+    (isSidePanelOpened && hasCommandMenuPageInNavigationStack) ||
+    isCoveredBySidePanelOnMobile;
 
   if (shouldHideButton) {
     return null;
   }
 
   const ariaLabel = t`Command Menu`;
+  const tooltipContent = t`Command menu | ${getOsControlSymbol()}K`;
 
   return (
     <StyledButtonWrapper alignToTop={alignWithSidePanelTopBar}>
@@ -74,8 +79,8 @@ export const SidePanelToggleButton = () => {
         <IconButton
           Icon={IconDotsVertical}
           dataTestId="page-header-side-panel-button"
-          size={isMobile ? 'medium' : 'small'}
-          variant="secondary"
+          size="small"
+          variant="primary"
           accent="default"
           ariaLabel={ariaLabel}
           onClick={openSidePanelMenu}
@@ -85,7 +90,7 @@ export const SidePanelToggleButton = () => {
       <StyledTooltipWrapper>
         <AppTooltip
           anchorSelect="#toggle-side-panel-button"
-          content={ariaLabel}
+          content={tooltipContent}
           delay={TooltipDelay.longDelay}
           place={TooltipPosition.Bottom}
           offset={5}

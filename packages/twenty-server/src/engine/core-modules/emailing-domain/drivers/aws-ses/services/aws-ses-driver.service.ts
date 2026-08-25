@@ -20,13 +20,15 @@ import {
   type EmailingDomainResourceInput,
   type EmailingDomainVerificationResult,
 } from 'src/engine/core-modules/emailing-domain/drivers/interfaces/emailing-domain-driver.interface';
-import { type EmailingDomainSendEmailInput } from 'src/engine/core-modules/emailing-domain/drivers/types/emailing-domain-send-email-input.type';
+import { type EmailingDomainSendEmailRequest } from 'src/engine/core-modules/emailing-domain/drivers/types/emailing-domain-send-email-input.type';
 import { type EmailingDomainSendEmailResult } from 'src/engine/core-modules/emailing-domain/drivers/types/emailing-domain-send-email-result.type';
+import { getUnsubscribeBaseUrl } from 'src/engine/core-modules/emailing-domain/drivers/utils/get-unsubscribe-base-url.util';
+import { type UnsubscribeContentService } from 'src/engine/core-modules/emailing-domain/services/unsubscribe-content.service';
 
 import { AWS_SES_RESOURCE_NAME_PREFIX } from 'src/engine/core-modules/emailing-domain/drivers/aws-ses/constants/aws-ses-resource-name-prefix.constant';
 import { type AwsSesClientProvider } from 'src/engine/core-modules/emailing-domain/drivers/aws-ses/providers/aws-ses-client.provider';
-import { AwsSesRegisterDomainService } from 'src/engine/core-modules/emailing-domain/drivers/aws-ses/services/aws-ses-register-domain.service';
 import { type AwsSesHandleErrorService } from 'src/engine/core-modules/emailing-domain/drivers/aws-ses/services/aws-ses-handle-error.service';
+import { AwsSesRegisterDomainService } from 'src/engine/core-modules/emailing-domain/drivers/aws-ses/services/aws-ses-register-domain.service';
 import { type AwsSesSendEmailService } from 'src/engine/core-modules/emailing-domain/drivers/aws-ses/services/aws-ses-send-email.service';
 import { EmailingDomainStatus } from 'src/engine/core-modules/emailing-domain/drivers/types/emailing-domain-status.type';
 import { type VerificationRecordDTO } from 'src/engine/core-modules/emailing-domain/dtos/verification-record.dto';
@@ -40,6 +42,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
     private readonly awsSesHandleErrorService: AwsSesHandleErrorService,
     private readonly awsSesRegisterDomainService: AwsSesRegisterDomainService,
     private readonly awsSesSendEmailService: AwsSesSendEmailService,
+    private readonly unsubscribeContentService: UnsubscribeContentService,
   ) {}
 
   async verifyDomain(
@@ -50,7 +53,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
 
       const tenantName = this.buildTenantName(input.workspaceId);
 
-      const { isVerified, verificationRecords } =
+      const { isVerified, status, verificationRecords } =
         await this.createOrUpdateEmailIdentity(input.domain, tenantName);
 
       if (isVerified) {
@@ -58,10 +61,8 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
       }
 
       return {
-        status: isVerified
-          ? EmailingDomainStatus.VERIFIED
-          : EmailingDomainStatus.PENDING,
-        verificationRecords,
+        status,
+        verificationRecords: this.withRecordStatus(verificationRecords, status),
       };
     } catch (error) {
       this.logger.error(`Failed to verify domain ${input.domain}: ${error}`);
@@ -91,7 +92,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
 
       return {
         status,
-        verificationRecords,
+        verificationRecords: this.withRecordStatus(verificationRecords, status),
       };
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -127,9 +128,15 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
   }
 
   async sendEmail(
-    input: EmailingDomainSendEmailInput,
+    input: EmailingDomainSendEmailRequest,
   ): Promise<EmailingDomainSendEmailResult> {
-    return this.awsSesSendEmailService.sendEmail(input, {
+    const unsubscribeBaseUrl = getUnsubscribeBaseUrl(input.emailingDomain);
+    const emailToSend = this.unsubscribeContentService.addTo(
+      input,
+      unsubscribeBaseUrl,
+    );
+
+    return this.awsSesSendEmailService.sendEmail(emailToSend, {
       tenantName: this.buildTenantName(input.workspaceId),
       configurationSetName: this.buildConfigurationSetName(input.workspaceId),
     });
@@ -221,6 +228,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
     tenantName: string,
   ): Promise<{
     isVerified: boolean;
+    status: EmailingDomainStatus;
     verificationRecords: VerificationRecordDTO[];
   }> {
     const sesClient = this.awsSesClientProvider.getSESClient();
@@ -232,6 +240,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
       const existingIdentity = await sesClient.send(getIdentityCommand);
 
       const isVerified = existingIdentity.VerifiedForSendingStatus === true;
+      const status = this.determineVerificationStatus(existingIdentity);
       const verificationRecords = this.buildVerificationRecords(
         domain,
         existingIdentity.DkimAttributes?.Tokens || [],
@@ -239,7 +248,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
 
       await this.associateResourceWithTenant(domain, tenantName);
 
-      return { isVerified, verificationRecords };
+      return { isVerified, status, verificationRecords };
     } catch (error) {
       if (error instanceof NotFoundException) {
         return await this.createNewEmailIdentity(domain, tenantName);
@@ -253,6 +262,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
     tenantName: string,
   ): Promise<{
     isVerified: boolean;
+    status: EmailingDomainStatus;
     verificationRecords: VerificationRecordDTO[];
   }> {
     const sesClient = this.awsSesClientProvider.getSESClient();
@@ -274,6 +284,7 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
 
     return {
       isVerified: false,
+      status: EmailingDomainStatus.PENDING,
       verificationRecords,
     };
   }
@@ -343,13 +354,24 @@ export class AwsSesDriver implements EmailingDomainDriverInterface {
       return EmailingDomainStatus.VERIFIED;
     }
 
-    if (
-      identityResponse.VerifiedForSendingStatus === false ||
-      dkimStatus === 'FAILED'
-    ) {
+    if (dkimStatus === 'FAILED') {
       return EmailingDomainStatus.FAILED;
     }
 
     return EmailingDomainStatus.PENDING;
+  }
+
+  private withRecordStatus(
+    records: VerificationRecordDTO[],
+    status: EmailingDomainStatus,
+  ): VerificationRecordDTO[] {
+    const recordStatus =
+      status === EmailingDomainStatus.VERIFIED
+        ? 'success'
+        : status === EmailingDomainStatus.FAILED
+          ? 'error'
+          : 'pending';
+
+    return records.map((record) => ({ ...record, status: recordStatus }));
   }
 }

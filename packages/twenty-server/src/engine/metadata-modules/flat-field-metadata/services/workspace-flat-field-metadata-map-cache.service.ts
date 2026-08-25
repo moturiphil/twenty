@@ -10,10 +10,14 @@ import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/
 import { createEmptyFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/constant/create-empty-flat-entity-maps.constant';
 import { FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type CompactFlatFieldMetadataMaps } from 'src/engine/metadata-modules/flat-field-metadata/types/compact-flat-field-metadata-maps.type';
+import { compactFlatFieldMetadataMaps } from 'src/engine/metadata-modules/flat-field-metadata/utils/compact-flat-field-metadata-maps.util';
+import { expandFlatFieldMetadataMaps } from 'src/engine/metadata-modules/flat-field-metadata/utils/expand-flat-field-metadata-maps.util';
 import { fromFieldMetadataEntityToFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/from-field-metadata-entity-to-flat-field-metadata.util';
 import { IndexMetadataEntity } from 'src/engine/metadata-modules/index-metadata/index-metadata.entity';
 import { computeUniqueFieldMetadataIdsFromIndexEntities } from 'src/engine/metadata-modules/index-metadata/utils/compute-unique-field-metadata-ids-from-index-entities.util';
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { SearchFieldMetadataEntity } from 'src/engine/metadata-modules/search-field-metadata/search-field-metadata.entity';
 import { ViewFieldEntity } from 'src/engine/metadata-modules/view-field/entities/view-field.entity';
 import { ViewFilterEntity } from 'src/engine/metadata-modules/view-filter/entities/view-filter.entity';
 import { ViewGroupEntity } from 'src/engine/metadata-modules/view-group/entities/view-group.entity';
@@ -27,9 +31,10 @@ import { addFlatEntityToFlatEntityMapsThroughMutationOrThrow } from 'src/engine/
 import { ViewSortEntity } from 'src/engine/metadata-modules/view-sort/entities/view-sort.entity';
 
 @Injectable()
-@WorkspaceCache('flatFieldMetadataMaps')
+@WorkspaceCache('flatFieldMetadataMaps', { packingPonderation: 64 })
 export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCacheProvider<
-  FlatEntityMaps<FlatFieldMetadata>
+  FlatEntityMaps<FlatFieldMetadata>,
+  CompactFlatFieldMetadataMaps
 > {
   constructor(
     @InjectRepository(FieldMetadataEntity)
@@ -50,8 +55,22 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
     private readonly viewSortRepository: WorkspaceScopedRepository<ViewSortEntity>,
     @InjectWorkspaceScopedRepository(ViewEntity)
     private readonly viewRepository: WorkspaceScopedRepository<ViewEntity>,
+    @InjectWorkspaceScopedRepository(SearchFieldMetadataEntity)
+    private readonly searchFieldMetadataRepository: WorkspaceScopedRepository<SearchFieldMetadataEntity>,
   ) {
     super();
+  }
+
+  override compactForStorage(
+    data: FlatEntityMaps<FlatFieldMetadata>,
+  ): CompactFlatFieldMetadataMaps {
+    return compactFlatFieldMetadataMaps(data);
+  }
+
+  override expandFromStorage(
+    compactData: CompactFlatFieldMetadataMaps,
+  ): FlatEntityMaps<FlatFieldMetadata> {
+    return expandFlatFieldMetadataMaps(compactData);
   }
 
   async computeForCache(
@@ -66,6 +85,7 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
       viewFilters,
       viewSorts,
       views,
+      searchFieldMetadatas,
     ] = await Promise.all([
       this.fieldMetadataRepository.find({
         where: { workspaceId },
@@ -104,9 +124,13 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
           'universalIdentifier',
           'kanbanAggregateOperationFieldMetadataId',
           'calendarFieldMetadataId',
+          'calendarEndFieldMetadataId',
           'mainGroupByFieldMetadataId',
         ],
         withDeleted: true,
+      }),
+      this.searchFieldMetadataRepository.find(workspaceId, {
+        select: ['id', 'universalIdentifier', 'fieldMetadataId'],
       }),
     ]);
 
@@ -114,9 +138,11 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
       viewFieldsByFieldId,
       viewFiltersByFieldId,
       calendarViewsByFieldId,
+      calendarEndViewsByFieldId,
       kanbanViewsByFieldId,
       mainGroupByFieldMetadataViewsByFieldId,
       viewSortsByFieldId,
+      searchFieldMetadatasByFieldId,
     ] = (
       [
         {
@@ -133,6 +159,10 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
         },
         {
           entities: views,
+          foreignKey: 'calendarEndFieldMetadataId',
+        },
+        {
+          entities: views,
           foreignKey: 'kanbanAggregateOperationFieldMetadataId',
         },
         {
@@ -141,6 +171,10 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
         },
         {
           entities: viewSorts,
+          foreignKey: 'fieldMetadataId',
+        },
+        {
+          entities: searchFieldMetadatas,
           foreignKey: 'fieldMetadataId',
         },
       ] as const
@@ -168,11 +202,15 @@ export class WorkspaceFlatFieldMetadataMapCacheService extends WorkspaceCachePro
             kanbanViewsByFieldId.get(fieldMetadataEntity.id) || [],
           calendarViews:
             calendarViewsByFieldId.get(fieldMetadataEntity.id) || [],
+          calendarEndViews:
+            calendarEndViewsByFieldId.get(fieldMetadataEntity.id) || [],
           mainGroupByFieldMetadataViews:
             mainGroupByFieldMetadataViewsByFieldId.get(
               fieldMetadataEntity.id,
             ) || [],
           viewSorts: viewSortsByFieldId.get(fieldMetadataEntity.id) || [],
+          searchFieldMetadatas:
+            searchFieldMetadatasByFieldId.get(fieldMetadataEntity.id) || [],
         },
         fieldMetadataIdToUniversalIdentifierMap,
         objectMetadataIdToUniversalIdentifierMap,

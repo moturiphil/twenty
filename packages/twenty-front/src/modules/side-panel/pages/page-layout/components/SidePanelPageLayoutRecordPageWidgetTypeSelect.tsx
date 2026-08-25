@@ -135,7 +135,9 @@ export const SidePanelPageLayoutRecordPageWidgetTypeSelect = () => {
     frontComponents: FrontComponent[];
   }>(FIND_MANY_FRONT_COMPONENTS);
 
-  const frontComponents = frontComponentsData?.frontComponents ?? [];
+  const frontComponents = (frontComponentsData?.frontComponents ?? []).filter(
+    (frontComponent) => !frontComponent.isHeadless,
+  );
 
   const frontComponentsWithSelectItemId = frontComponents.map(
     (frontComponent) => ({
@@ -277,6 +279,8 @@ export const SidePanelPageLayoutRecordPageWidgetTypeSelect = () => {
         __typename: 'PageLayoutWidget',
         id: widgetId,
         applicationId: '',
+        universalIdentifier: widgetId,
+        isSystemSideEffect: false,
         isActive: true,
         pageLayoutTabId: tabId,
         title: frontComponent.name,

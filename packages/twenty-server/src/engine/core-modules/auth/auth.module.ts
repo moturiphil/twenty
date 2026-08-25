@@ -5,7 +5,6 @@ import { CoreEntityCacheModule } from 'src/engine/core-entity-cache/core-entity-
 import { ApiKeyEntity } from 'src/engine/core-modules/api-key/api-key.entity';
 import { ApiKeyModule } from 'src/engine/core-modules/api-key/api-key.module';
 import { AppTokenEntity } from 'src/engine/core-modules/app-token/app-token.entity';
-import { AppTokenService } from 'src/engine/core-modules/app-token/services/app-token.service';
 import { ApplicationRegistrationModule } from 'src/engine/core-modules/application/application-registration/application-registration.module';
 import { ApplicationModule } from 'src/engine/core-modules/application/application.module';
 import { ConnectionProviderOAuthController } from 'src/engine/core-modules/application/connection-provider/connection-provider-oauth.controller';
@@ -35,6 +34,7 @@ import { LoginTokenService } from 'src/engine/core-modules/auth/token/services/l
 import { RefreshTokenService } from 'src/engine/core-modules/auth/token/services/refresh-token.service';
 import { TransientTokenService } from 'src/engine/core-modules/auth/token/services/transient-token.service';
 import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
+import { BillingModule } from 'src/engine/core-modules/billing/billing.module';
 import { DomainServerConfigModule } from 'src/engine/core-modules/domain/domain-server-config/domain-server-config.module';
 import { SubdomainManagerModule } from 'src/engine/core-modules/domain/subdomain-manager/subdomain-manager.module';
 import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace-domains/workspace-domains.module';
@@ -54,7 +54,9 @@ import { SecureHttpClientModule } from 'src/engine/core-modules/secure-http-clie
 import { WorkspaceSSOModule } from 'src/engine/core-modules/sso/sso.module';
 import { WorkspaceSSOIdentityProviderEntity } from 'src/engine/core-modules/sso/workspace-sso-identity-provider.entity';
 import { TwoFactorAuthenticationMethodEntity } from 'src/engine/core-modules/two-factor-authentication/entities/two-factor-authentication-method.entity';
+import { ThrottlerModule } from 'src/engine/core-modules/throttler/throttler.module';
 import { TwoFactorAuthenticationModule } from 'src/engine/core-modules/two-factor-authentication/two-factor-authentication.module';
+import { UserSessionModule } from 'src/engine/core-modules/user-session/user-session.module';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
 import { UserEntity } from 'src/engine/core-modules/user/user.entity';
@@ -72,6 +74,7 @@ import { CalendarChannelSyncStatusService } from 'src/modules/calendar/common/se
 import { ConnectedAccountModule } from 'src/modules/connected-account/connected-account.module';
 import { EmailAliasManagerModule } from 'src/modules/connected-account/email-alias-manager/email-alias-manager.module';
 import { MessagingCommonModule } from 'src/modules/messaging/common/messaging-common.module';
+import { OnboardingRecentMessagesImportModule } from 'src/modules/onboarding-recent-messages-import/onboarding-recent-messages-import.module';
 import { MessagingFolderSyncManagerModule } from 'src/modules/messaging/message-folder-manager/messaging-folder-sync-manager.module';
 
 import { AuthResolver } from './auth.resolver';
@@ -84,6 +87,7 @@ import { JwtAuthStrategy } from './strategies/jwt.auth.strategy';
     JwtModule,
     WorkspaceDomainsModule,
     TokenModule,
+    ThrottlerModule,
     UserModule,
     TypeOrmModule.forFeature([
       WorkspaceEntity,
@@ -104,6 +108,7 @@ import { JwtAuthStrategy } from './strategies/jwt.auth.strategy';
     OnboardingModule,
     ConnectedAccountModule,
     MessagingCommonModule,
+    OnboardingRecentMessagesImportModule,
     MessagingFolderSyncManagerModule,
     WorkspaceSSOModule,
     FeatureFlagModule,
@@ -126,9 +131,11 @@ import { JwtAuthStrategy } from './strategies/jwt.auth.strategy';
     CoreEntityCacheModule,
     SecureHttpClientModule,
     EnterpriseModule,
+    BillingModule,
     FileModule,
     ConnectedAccountTokenEncryptionModule,
     EmailAliasManagerModule,
+    UserSessionModule,
   ],
   controllers: [
     GoogleAuthController,
@@ -149,7 +156,6 @@ import { JwtAuthStrategy } from './strategies/jwt.auth.strategy';
     GoogleAPIScopesService,
     GoogleApisServiceAvailabilityService,
     MicrosoftAPIsService,
-    AppTokenService,
     AccessTokenService,
     RefreshTokenService,
     LoginTokenService,

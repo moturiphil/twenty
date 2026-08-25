@@ -35,6 +35,8 @@ export { baseWorkflowActionSchema } from './schemas/base-workflow-action-schema'
 export { baseWorkflowActionSettingsSchema } from './schemas/base-workflow-action-settings-schema';
 export { workflowCodeActionSchema } from './schemas/code-action-schema';
 export { workflowCodeActionSettingsSchema } from './schemas/code-action-settings-schema';
+export { workflowCreateCalendarEventActionSchema } from './schemas/create-calendar-event-action-schema';
+export { workflowCreateCalendarEventActionSettingsSchema } from './schemas/create-calendar-event-action-settings-schema';
 export { workflowCreateRecordActionSchema } from './schemas/create-record-action-schema';
 export { workflowCreateRecordActionSettingsSchema } from './schemas/create-record-action-settings-schema';
 export { workflowCronTriggerSchema } from './schemas/cron-trigger-schema';
@@ -97,6 +99,7 @@ export {
 } from './schemas/workflow-run-step-log-schema';
 export { workflowRunStepStatusSchema } from './schemas/workflow-run-step-status-schema';
 export { workflowTriggerSchema } from './schemas/workflow-trigger-schema';
+export { workflowVariableReferenceSchema } from './schemas/workflow-variable-reference-schema';
 export type { EmailRecipients } from './types/EmailRecipients';
 export type { FunctionInput } from './types/FunctionInput';
 export type {
@@ -124,6 +127,7 @@ export { canObjectBeManagedByAutomation } from './utils/canObjectBeManagedByAuto
 export { extractRawVariableNamePart } from './utils/extractRawVariableNameParts';
 export { getFunctionInputFromInputSchema } from './utils/getFunctionInputFromInputSchema';
 export { getWorkflowRunContext } from './utils/getWorkflowRunContext';
+export { isStandaloneVariableString } from './utils/isStandaloneVariableString';
 export { parseBooleanFromStringValue } from './utils/parseBooleanFromStringValue';
 export { parseDataFromContentType } from './utils/parseDataFromContentType';
 export {

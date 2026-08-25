@@ -1,7 +1,7 @@
 import { InformationBannerWrapper } from '@/information-banner/components/InformationBannerWrapper';
 import { styled } from '@linaria/react';
 import { type ReactNode } from 'react';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme-constants';
 
 type PageCardLayoutProps = {
   header: ReactNode;
@@ -16,6 +16,12 @@ const StyledRoot = styled.div`
   flex-direction: row;
   min-height: 0;
   min-width: 0;
+
+  @media print {
+    display: block;
+    min-height: auto;
+    min-width: auto;
+  }
 `;
 
 const StyledMainCardWrapper = styled.div`
@@ -26,12 +32,25 @@ const StyledMainCardWrapper = styled.div`
   min-width: 0;
   padding-left: 4px;
   width: 0;
+
+  @media (max-width: ${MOBILE_VIEWPORT}px) {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  @media print {
+    display: block;
+    margin-left: 0;
+    min-width: auto;
+    padding-left: 0;
+    width: auto;
+  }
 `;
 
 // oxlint-disable-next-line twenty/no-hardcoded-colors
 const StyledCard = styled.div`
   background: ${themeCssVariables.background.primary};
-  border-radius: 16px 0 0 0;
+  border-radius: ${themeCssVariables.border.radius.lg} 0 0 0;
   box-shadow:
     -4px 0 4px 0 rgba(0, 0, 0, 0.006),
     0 0 0 1px ${themeCssVariables.border.color.medium};
@@ -48,6 +67,23 @@ const StyledCard = styled.div`
       -4px 0 4px 0 rgba(0, 0, 0, 0.03),
       0 0 0 1px ${themeCssVariables.border.color.medium};
   }
+
+  @media (max-width: ${MOBILE_VIEWPORT}px) {
+    border-radius: 0;
+    box-shadow: none;
+
+    .dark & {
+      box-shadow: none;
+    }
+  }
+
+  @media print {
+    border-radius: 0;
+    box-shadow: none;
+    display: block;
+    min-height: auto;
+    overflow: visible;
+  }
 `;
 
 const StyledBodyContent = styled.div`
@@ -56,6 +92,17 @@ const StyledBodyContent = styled.div`
   flex-direction: column;
   min-height: 0;
   width: 100%;
+
+  @media print {
+    display: block;
+    min-height: auto;
+  }
+`;
+
+const StyledPrintHidden = styled.div`
+  @media print {
+    display: none;
+  }
 `;
 
 export const PageCardLayout = ({
@@ -68,10 +115,14 @@ export const PageCardLayout = ({
     <StyledRoot>
       <StyledMainCardWrapper>
         <StyledCard>
-          {header}
-          {secondaryBar}
+          <StyledPrintHidden>{header}</StyledPrintHidden>
+          <StyledPrintHidden>{secondaryBar}</StyledPrintHidden>
           <StyledBodyContent>
-            {showInformationBanner && <InformationBannerWrapper />}
+            {showInformationBanner && (
+              <StyledPrintHidden>
+                <InformationBannerWrapper />
+              </StyledPrintHidden>
+            )}
             {children}
           </StyledBodyContent>
         </StyledCard>

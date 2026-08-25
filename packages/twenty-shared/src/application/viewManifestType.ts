@@ -61,12 +61,19 @@ export type ViewFieldGroupManifest = SyncableEntityOptions & {
 export type ViewSortManifest = SyncableEntityOptions & {
   fieldMetadataUniversalIdentifier: string;
   direction: ViewSortDirection;
+  subFieldName?: string;
 };
 
 export type ViewManifest = SyncableEntityOptions & {
   name: string;
   objectUniversalIdentifier: string;
   type?: ViewType;
+  /**
+   * @deprecated View keys (INDEX, FIELDS_WIDGET) are reserved for the
+   * engine-owned default views, which the server provisions automatically for
+   * every object. This field is ignored: manifest views are always created as
+   * additional views.
+   */
   key?: ViewKey;
   icon?: string;
   position?: number;
@@ -81,6 +88,7 @@ export type ViewManifest = SyncableEntityOptions & {
   kanbanAggregateOperationFieldMetadataUniversalIdentifier?: string;
   calendarLayout?: ViewCalendarLayout;
   calendarFieldMetadataUniversalIdentifier?: string;
+  calendarEndFieldMetadataUniversalIdentifier?: string;
   fields?: ViewFieldManifest[];
   filters?: ViewFilterManifest[];
   filterGroups?: ViewFilterGroupManifest[];

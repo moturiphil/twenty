@@ -9,7 +9,9 @@ import { SidePanelList } from '@/side-panel/components/SidePanelList';
 import { SidePanelTopBar } from '@/side-panel/components/SidePanelTopBar';
 import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
 import { sidePanelNavigationStackState } from '@/side-panel/states/sidePanelNavigationStackState';
+import { sidePanelPageInfoState } from '@/side-panel/states/sidePanelPageInfoState';
 import { sidePanelPageState } from '@/side-panel/states/sidePanelPageState';
+import { sidePanelSearchState } from '@/side-panel/states/sidePanelSearchState';
 import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
 import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
 import { PageFocusId } from '@/types/PageFocusId';
@@ -26,13 +28,19 @@ jest.mock('@/side-panel/components/SidePanelTopBarRightCornerIcon', () => ({
   SidePanelTopBarRightCornerIcon: () => null,
 }));
 
+jest.mock('@/side-panel/components/SidePanelExpandButton', () => ({
+  SidePanelExpandButton: () => null,
+}));
+
+const mockCloseSidePanelMenu = jest.fn();
+
 jest.mock('@/side-panel/hooks/useSidePanelContextChips', () => ({
   useSidePanelContextChips: () => ({ contextChips: [] }),
 }));
 
 jest.mock('@/side-panel/hooks/useSidePanelMenu', () => ({
   useSidePanelMenu: () => ({
-    closeSidePanelMenu: jest.fn(),
+    closeSidePanelMenu: mockCloseSidePanelMenu,
   }),
 }));
 
@@ -78,6 +86,11 @@ const createSidePanelTopBarStore = ({
   store.set(isSidePanelOpenedState.atom, true);
   store.set(sidePanelPageState.atom, sidePanelPage);
   store.set(sidePanelNavigationStackState.atom, sidePanelNavigationStack);
+  store.set(sidePanelPageInfoState.atom, {
+    title: sidePanelNavigationStack.at(-1)?.pageTitle,
+    Icon: sidePanelNavigationStack.at(-1)?.pageIcon,
+    instanceId: sidePanelNavigationStack.at(-1)?.pageId ?? '',
+  });
   store.set(focusStackState.atom, [recordIndexFocusItem]);
 
   return store;
@@ -105,6 +118,7 @@ const renderSidePanelCommandMenu = (store = createSidePanelTopBarStore()) => {
 
 describe('SidePanelTopBar', () => {
   beforeEach(() => {
+    mockCloseSidePanelMenu.mockClear();
     mockIsMobile = false;
   });
 
@@ -148,6 +162,173 @@ describe('SidePanelTopBar', () => {
         componentInstanceId: SIDE_PANEL_FOCUS_ID,
       },
     });
+  });
+
+  it('clears search with Escape without navigating', () => {
+    const { store } = renderSidePanelCommandMenu();
+
+    const input = screen.getByTestId(SIDE_PANEL_FOCUS_ID);
+
+    fireEvent.change(input, {
+      target: { value: 'company' },
+    });
+
+    fireEvent.keyDown(input, {
+      key: 'Escape',
+      code: 'Escape',
+    });
+
+    expect(store.get(sidePanelSearchState.atom)).toBe('');
+    expect(store.get(sidePanelNavigationStackState.atom)).toHaveLength(1);
+    expect(mockCloseSidePanelMenu).not.toHaveBeenCalled();
+  });
+
+  it('closes the side panel with Escape from an empty root search', () => {
+    renderSidePanelCommandMenu();
+
+    const input = screen.getByTestId(SIDE_PANEL_FOCUS_ID);
+
+    fireEvent.keyDown(input, {
+      key: 'Escape',
+      code: 'Escape',
+    });
+
+    expect(mockCloseSidePanelMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles Escape before the underlying page hotkeys', () => {
+    const underlyingPageEscapeHandler = jest.fn();
+
+    document.addEventListener('keydown', underlyingPageEscapeHandler);
+
+    try {
+      renderSidePanelCommandMenu();
+
+      fireEvent.keyDown(document.body, {
+        key: 'Escape',
+        code: 'Escape',
+      });
+
+      expect(mockCloseSidePanelMenu).toHaveBeenCalledTimes(1);
+      expect(underlyingPageEscapeHandler).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', underlyingPageEscapeHandler);
+    }
+  });
+
+  it('does not navigate with Backspace while search has text', () => {
+    const { store } = renderSidePanelCommandMenu(
+      createSidePanelTopBarStore({
+        sidePanelPage: SidePanelPages.SearchRecords,
+        sidePanelNavigationStack: [
+          {
+            page: SidePanelPages.CommandMenuDisplay,
+            pageTitle: 'Command Menu',
+            pageIcon: IconDotsVertical,
+            pageId: 'command-menu',
+          },
+          {
+            page: SidePanelPages.SearchRecords,
+            pageTitle: 'Search',
+            pageIcon: IconDotsVertical,
+            pageId: 'search-records',
+          },
+        ],
+      }),
+    );
+
+    const input = screen.getByTestId(SIDE_PANEL_FOCUS_ID);
+
+    fireEvent.change(input, {
+      target: { value: 'company' },
+    });
+
+    fireEvent.keyDown(input, {
+      key: 'Backspace',
+      code: 'Backspace',
+    });
+
+    expect(store.get(sidePanelSearchState.atom)).toBe('company');
+    expect(store.get(sidePanelNavigationStackState.atom)).toHaveLength(2);
+  });
+
+  it('goes back with Backspace from an empty search when side panel history exists', () => {
+    const { store } = renderSidePanelCommandMenu(
+      createSidePanelTopBarStore({
+        sidePanelPage: SidePanelPages.SearchRecords,
+        sidePanelNavigationStack: [
+          {
+            page: SidePanelPages.CommandMenuDisplay,
+            pageTitle: 'Command Menu',
+            pageIcon: IconDotsVertical,
+            pageId: 'command-menu',
+          },
+          {
+            page: SidePanelPages.SearchRecords,
+            pageTitle: 'Search',
+            pageIcon: IconDotsVertical,
+            pageId: 'search-records',
+          },
+        ],
+      }),
+    );
+
+    const input = screen.getByTestId(SIDE_PANEL_FOCUS_ID);
+
+    fireEvent.keyDown(input, {
+      key: 'Backspace',
+      code: 'Backspace',
+    });
+
+    expect(store.get(sidePanelNavigationStackState.atom)).toHaveLength(1);
+    expect(store.get(sidePanelPageState.atom)).toBe(
+      SidePanelPages.CommandMenuDisplay,
+    );
+    expect(mockCloseSidePanelMenu).not.toHaveBeenCalled();
+  });
+
+  it('does not close the root side panel with Backspace from an empty search', () => {
+    const { store } = renderSidePanelCommandMenu();
+
+    const input = screen.getByTestId(SIDE_PANEL_FOCUS_ID);
+
+    fireEvent.keyDown(input, {
+      key: 'Backspace',
+      code: 'Backspace',
+    });
+
+    expect(store.get(sidePanelNavigationStackState.atom)).toHaveLength(1);
+    expect(mockCloseSidePanelMenu).not.toHaveBeenCalled();
+  });
+
+  it('goes back with Escape while the search input is not focused', () => {
+    const { store } = renderSidePanelCommandMenu(
+      createSidePanelTopBarStore({
+        sidePanelPage: SidePanelPages.SearchRecords,
+        sidePanelNavigationStack: [
+          {
+            page: SidePanelPages.CommandMenuDisplay,
+            pageTitle: 'Command Menu',
+            pageIcon: IconDotsVertical,
+            pageId: 'command-menu',
+          },
+          {
+            page: SidePanelPages.SearchRecords,
+            pageTitle: 'Search',
+            pageIcon: IconDotsVertical,
+            pageId: 'search-records',
+          },
+        ],
+      }),
+    );
+
+    fireEvent.keyDown(document.body, {
+      key: 'Escape',
+      code: 'Escape',
+    });
+
+    expect(store.get(sidePanelNavigationStackState.atom)).toHaveLength(1);
+    expect(mockCloseSidePanelMenu).not.toHaveBeenCalled();
   });
 
   it('renders the close button after the command menu content', () => {
