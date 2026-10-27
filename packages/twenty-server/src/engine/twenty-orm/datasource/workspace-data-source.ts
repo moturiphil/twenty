@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+
 import { type Pool } from 'pg';
 import { isDefined } from 'twenty-shared/utils';
 
@@ -11,7 +13,7 @@ import { type WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/wo
 import { findFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { type WorkspaceInternalContext } from 'src/engine/twenty-orm/interfaces/workspace-internal-context.interface';
-import { type RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config';
+import { type RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config.type';
 import { type WorkspaceTransactionScope } from 'src/engine/twenty-orm/types/workspace-transaction-scope.type';
 import { ClientQueryExecutor } from 'src/engine/twenty-orm/executor/client-query-executor';
 import { PoolQueryExecutor } from 'src/engine/twenty-orm/executor/pool-query-executor';
@@ -32,6 +34,7 @@ const tableShapeCacheByFlatObjectMetadataMaps = new WeakMap<
 >();
 
 export class WorkspaceDataSource {
+  private readonly logger = new Logger(WorkspaceDataSource.name);
   private readonly pool: Pool;
   private readonly internalContext: WorkspaceInternalContext;
   private readonly authContext: WorkspaceAuthContext;
@@ -57,33 +60,83 @@ export class WorkspaceDataSource {
   getRepository<T extends ObjectLiteral = ObjectRecord>(
     nameSingular: string,
     rolePermissionConfig?: RolePermissionConfig,
+    repositoryOptions?: { shouldSkipEventEmission?: boolean },
   ): WorkspaceRepository<T> {
     return this.buildRepository<T>({
       nameSingular,
       rolePermissionConfig,
       executor: new PoolQueryExecutor({ pool: this.pool }),
+      shouldSkipEventEmission:
+        repositoryOptions?.shouldSkipEventEmission ?? false,
     });
   }
 
   async transaction<T>(
     work: (transactionScope: WorkspaceTransactionScope) => Promise<T>,
   ): Promise<T> {
-    return this.runInClientTransaction((executor) =>
+    const afterCommitCallbacks: Array<() => void | Promise<void>> = [];
+    const afterCommit: WorkspaceTransactionScope['afterCommit'] = (callback) =>
+      afterCommitCallbacks.push(callback);
+    const transactionalInternalContext: WorkspaceInternalContext = {
+      ...this.internalContext,
+      eventEmitterService: {
+        emitDatabaseBatchEvent: (event) =>
+          afterCommit(() =>
+            this.internalContext.eventEmitterService.emitDatabaseBatchEvent(
+              event,
+            ),
+          ),
+      },
+      recordStock: {
+        assertRecordStockAvailable: (args) =>
+          this.internalContext.recordStock.assertRecordStockAvailable(args),
+        acquireRecordStock: async (args) => {
+          afterCommit(() =>
+            this.internalContext.recordStock.acquireRecordStock(args),
+          );
+        },
+        releaseRecordStock: async (args) => {
+          afterCommit(() =>
+            this.internalContext.recordStock.releaseRecordStock(args),
+          );
+        },
+      },
+    };
+    const result = await this.runInClientTransaction((executor) =>
       work({
+        workspaceId: this.internalContext.workspaceId,
         getRepository: <T extends ObjectLiteral = ObjectRecord>(
           nameSingular: string,
           rolePermissionConfig?: RolePermissionConfig,
+          repositoryOptions?: { shouldSkipEventEmission?: boolean },
         ) =>
           this.buildRepository<T>({
             nameSingular,
             rolePermissionConfig,
             executor,
             isTransactional: true,
+            shouldSkipEventEmission:
+              repositoryOptions?.shouldSkipEventEmission ?? false,
+            internalContext: transactionalInternalContext,
           }),
         executeRawQuery: (sql, parameters = []) =>
           executor.execute({ text: sql, values: parameters }),
+        afterCommit,
       }),
     );
+
+    for (const callback of afterCommitCallbacks) {
+      try {
+        await callback();
+      } catch (error) {
+        this.logger.error(
+          `After-commit callback failed for workspace ${this.internalContext.workspaceId}`,
+          error,
+        );
+      }
+    }
+
+    return result;
   }
 
   private async runInClientTransaction<T>(
@@ -100,14 +153,18 @@ export class WorkspaceDataSource {
     rolePermissionConfig,
     executor,
     isTransactional = false,
+    shouldSkipEventEmission = false,
+    internalContext = this.internalContext,
   }: {
     nameSingular: string;
     rolePermissionConfig?: RolePermissionConfig;
     executor: QueryExecutor;
     isTransactional?: boolean;
+    shouldSkipEventEmission?: boolean;
+    internalContext?: WorkspaceInternalContext;
   }): WorkspaceRepository<T> {
     const objectMetadataId =
-      this.internalContext.objectIdByNameSingular[nameSingular];
+      internalContext.objectIdByNameSingular[nameSingular];
 
     if (!isDefined(objectMetadataId)) {
       throw new TwentyOrmException(
@@ -121,6 +178,8 @@ export class WorkspaceDataSource {
       rolePermissionConfig,
       executor,
       isTransactional,
+      shouldSkipEventEmission,
+      internalContext,
     });
   }
 
@@ -131,50 +190,64 @@ export class WorkspaceDataSource {
     rolePermissionConfig,
     executor,
     isTransactional = false,
+    shouldSkipEventEmission = false,
+    internalContext = this.internalContext,
   }: {
     objectMetadataId: string;
     rolePermissionConfig?: RolePermissionConfig;
     executor: QueryExecutor;
     isTransactional?: boolean;
+    shouldSkipEventEmission?: boolean;
+    internalContext?: WorkspaceInternalContext;
   }): WorkspaceRepository<T> {
     const flatObjectMetadata =
       this.getFlatObjectMetadataOrThrow(objectMetadataId);
 
+    const repositoryRolePermissionConfig: RolePermissionConfig =
+      rolePermissionConfig ?? { intersectionOf: {} };
+
     const { objectRecordsPermissions, shouldBypassPermissionChecks } =
       resolveObjectRecordsPermissions({
-        rolePermissionConfig,
+        rolePermissionConfig: repositoryRolePermissionConfig,
         objectPermissionsByRoleId: this.objectPermissionsByRoleId,
       });
 
     return new WorkspaceRepository<T>({
       tableShape: this.getTableShape(objectMetadataId),
       flatObjectMetadata,
-      internalContext: this.internalContext,
+      internalContext,
       authContext: this.authContext,
       executor,
       objectRecordsPermissions,
+      rolePermissionConfig: repositoryRolePermissionConfig,
       shouldBypassPermissionChecks,
+      shouldSkipEventEmission: shouldSkipEventEmission ?? false,
       tableShapeByObjectMetadataId: (targetObjectMetadataId) =>
         this.getTableShape(targetObjectMetadataId),
       flatObjectMetadataByObjectMetadataId: (targetObjectMetadataId) =>
         this.getFlatObjectMetadataOrThrow(targetObjectMetadataId),
-      getRepositoryForObjectMetadataId: (targetObjectMetadataId) =>
-        this.buildRepositoryForObjectMetadataId({
+      getRepositoryForObjectMetadataId: <
+        Entity extends ObjectLiteral = ObjectRecord,
+      >(
+        targetObjectMetadataId: string,
+      ) =>
+        this.buildRepositoryForObjectMetadataId<Entity>({
           objectMetadataId: targetObjectMetadataId,
           rolePermissionConfig,
           executor,
           isTransactional,
+          shouldSkipEventEmission,
+          internalContext,
         }),
       isTransactional,
       runInNewTransaction: (work) =>
-        this.runInClientTransaction((transactionExecutor) =>
+        this.transaction((transactionScope) =>
           work(
-            this.buildRepositoryForObjectMetadataId({
-              objectMetadataId,
+            transactionScope.getRepository<T>(
+              flatObjectMetadata.nameSingular,
               rolePermissionConfig,
-              executor: transactionExecutor,
-              isTransactional: true,
-            }),
+              { shouldSkipEventEmission },
+            ),
           ),
         ),
     });

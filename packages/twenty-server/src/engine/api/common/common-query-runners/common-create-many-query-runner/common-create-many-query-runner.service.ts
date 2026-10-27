@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 
 import { msg } from '@lingui/core/macro';
 import { QUERY_MAX_RECORDS } from 'twenty-shared/constants';
-import { ObjectRecord } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
+import { MetadataReadability, ObjectRecord } from 'twenty-shared/types';
+import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
 import {
   Brackets,
   FindOptionsRelations,
@@ -23,6 +23,7 @@ import {
   CommonQueryRunnerExceptionCode,
 } from 'src/engine/api/common/common-query-runners/errors/common-query-runner.exception';
 import { STANDARD_ERROR_MESSAGE } from 'src/engine/api/common/common-query-runners/errors/standard-error-message.constant';
+import { computeMaxFieldCountPerRecord } from 'src/engine/api/common/common-query-runners/utils/compute-max-field-count-per-record.util';
 import { CommonBaseQueryRunnerContext } from 'src/engine/api/common/types/common-base-query-runner-context.type';
 import { CommonExtendedQueryRunnerContext } from 'src/engine/api/common/types/common-extended-query-runner-context.type';
 import {
@@ -36,18 +37,27 @@ import { type NestedRelationsReadPathOptions } from 'src/engine/api/common/types
 import { buildColumnsToReturn } from 'src/engine/api/graphql/graphql-query-runner/utils/build-columns-to-return';
 import { buildColumnsToSelect } from 'src/engine/api/graphql/graphql-query-runner/utils/build-columns-to-select';
 import { assertIsValidUuid } from 'src/engine/api/graphql/workspace-query-runner/utils/assert-is-valid-uuid.util';
-import { getAllSelectableColumnNames } from 'src/engine/api/utils/get-all-selectable-column-names.utils';
+import { getAllSelectableColumnNames } from 'src/engine/api/utils/get-all-selectable-column-names.util';
 import { WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
 import { RecordPositionService } from 'src/engine/core-modules/record-position/services/record-position.service';
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
-import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type OrmFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/orm-flat-field-metadata.type';
 import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
 import { type FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { assertMutationNotOnRemoteObject } from 'src/engine/metadata-modules/object-metadata/utils/assert-mutation-not-on-remote-object.util';
+import { RecordSharingMode } from 'src/engine/core-modules/record-share/enums/record-sharing-mode.enum';
+import { ShareWithService } from 'src/engine/core-modules/record-share/services/share-with.service';
+import { type ShareWithInput } from 'src/engine/core-modules/record-share/types/share-with-input.type';
+import { resolveObjectSharing } from 'src/engine/core-modules/record-share/utils/resolve-object-sharing.util';
+import { resolveShareWithToWrite } from 'src/engine/core-modules/record-share/utils/resolve-share-with-to-write.util';
 import { WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
-import { RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config';
+import { RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config.type';
+import { containsNestedRelationCreate } from 'src/engine/twenty-orm/utils/contains-nested-relation-create.util';
+import { getNestedRelationFieldNames } from 'src/engine/twenty-orm/utils/get-nested-relation-field-names.util';
+
+const MAX_NESTED_RELATION_CREATE_DEPTH = 5;
 
 @Injectable()
 export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerService<
@@ -56,7 +66,10 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
 > {
   protected readonly operationName = CommonQueryNames.CREATE_MANY;
 
-  constructor(private readonly recordPositionService: RecordPositionService) {
+  constructor(
+    private readonly recordPositionService: RecordPositionService,
+    private readonly shareWithService: ShareWithService,
+  ) {
     super();
   }
 
@@ -64,6 +77,48 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     args: CommonExtendedInput<CreateManyQueryArgs>,
     queryRunnerContext: CommonExtendedQueryRunnerContext,
   ): Promise<ObjectRecord[]> {
+    const isPrivateObject =
+      queryRunnerContext.flatObjectMetadata.readability ===
+      MetadataReadability.PRIVATE;
+    const { sharingMode } = resolveObjectSharing(queryRunnerContext);
+    const isGatedThroughRecordShares =
+      sharingMode === RecordSharingMode.PRIVATE ||
+      sharingMode === RecordSharingMode.INHERITED;
+
+    // An inherited record is reachable through its parent, so shareWith is optional there
+    if (isPrivateObject || isNonEmptyArray(args.shareWith)) {
+      await this.shareWithService.validateShareWithOrThrow({
+        authContext: queryRunnerContext.authContext,
+        shareWith: args.shareWith,
+      });
+    }
+
+    if (
+      !isDefined(queryRunnerContext.transactionScope) &&
+      (isDefined(
+        resolveShareWithToWrite({ sharingMode, shareWith: args.shareWith }),
+      ) ||
+        containsNestedRelationCreate(
+          args.data,
+          getNestedRelationFieldNames({
+            flatObjectMetadata: queryRunnerContext.flatObjectMetadata,
+            flatFieldMetadataMaps: queryRunnerContext.flatFieldMetadataMaps,
+          }),
+        ))
+    ) {
+      return this.workspaceOrmManager.runInWorkspaceTransaction(
+        (transactionScope) =>
+          this.run(args, {
+            ...queryRunnerContext,
+            transactionScope,
+            repository: transactionScope.getRepository(
+              queryRunnerContext.flatObjectMetadata.nameSingular,
+              queryRunnerContext.rolePermissionConfig,
+            ),
+          }),
+      );
+    }
+
     if (args.data.length > QUERY_MAX_RECORDS) {
       throw new CommonQueryRunnerException(
         `Maximum number of records to upsert is ${QUERY_MAX_RECORDS}.`,
@@ -108,7 +163,14 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
       flatObjectMetadata,
       flatObjectMetadataMaps,
       flatFieldMetadataMaps,
-      repository,
+      repository:
+        isGatedThroughRecordShares &&
+        isDefined(queryRunnerContext.transactionScope)
+          ? queryRunnerContext.transactionScope.getRepository(
+              flatObjectMetadata.nameSingular,
+              { shouldBypassPermissionChecks: true },
+            )
+          : repository,
       selectedFieldsResult: args.selectedFieldsResult,
     });
 
@@ -120,6 +182,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
       flatFieldMetadataMaps,
       authContext,
       rolePermissionConfig,
+      repository,
       nestedRelationsReadPathOptions: this.getNestedRelationsReadPathOptions(),
     });
 
@@ -134,15 +197,17 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     flatFieldMetadataMaps,
     authContext,
     rolePermissionConfig,
+    repository,
     nestedRelationsReadPathOptions,
   }: {
     args: CommonExtendedInput<CreateManyQueryArgs>;
     records: ObjectRecord[];
     flatObjectMetadata: FlatObjectMetadata;
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     authContext: WorkspaceAuthContext;
     rolePermissionConfig?: RolePermissionConfig;
+    repository: WorkspaceRepository<ObjectRecord>;
     nestedRelationsReadPathOptions: NestedRelationsReadPathOptions;
   }): Promise<void> {
     if (!args.selectedFieldsResult.relations) {
@@ -161,6 +226,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
       limit: QUERY_MAX_RECORDS,
       authContext,
       rolePermissionConfig,
+      repository,
       selectedFields: args.selectedFieldsResult.select,
       ...nestedRelationsReadPathOptions,
     });
@@ -218,7 +284,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     repository: WorkspaceRepository<ObjectLiteral>;
     flatObjectMetadata: FlatObjectMetadata;
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     flatIndexMaps: FlatEntityMaps<FlatIndexMetadata>;
     args: CommonExtendedInput<CreateManyQueryArgs>;
     workspaceId: string;
@@ -237,14 +303,23 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
 
       const writeRepository = this.getWriteRepository(queryRunnerContext);
 
-      return writeRepository.runInsert({
-        records: await this.resolveNestedRelations({
+      const insertResult = await writeRepository.runInsert({
+        records: await this.resolveNestedRelationsForCreate({
           records: args.data,
+          shareWith: args.shareWith,
           queryRunnerContext,
           writeRepository,
         }),
         columnsToReturn: selectedColumns,
       });
+
+      await this.insertRecordShares({
+        insertResult,
+        shareWith: args.shareWith,
+        queryRunnerContext,
+      });
+
+      return insertResult;
     }
 
     return this.performUpsertOperation({
@@ -274,7 +349,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     repository: WorkspaceRepository<ObjectLiteral>;
     flatObjectMetadata: FlatObjectMetadata;
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     flatIndexMaps: FlatEntityMaps<FlatIndexMetadata>;
     args: CreateManyQueryArgs;
     selectedFieldsResult: CommonSelectedFieldsResult;
@@ -328,6 +403,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
         flatFieldMetadataMaps,
         result,
         columnsToReturn,
+        shareWith: args.shareWith,
         queryRunnerContext,
       });
     }
@@ -336,6 +412,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
       recordsToInsert: recordsToInsertWithPosition,
       result,
       columnsToReturn,
+      shareWith: args.shareWith,
       queryRunnerContext,
     });
 
@@ -350,7 +427,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
   }: {
     recordsToInsert: Partial<ObjectRecord>[];
     flatObjectMetadata: FlatObjectMetadata;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     workspaceId: string;
   }): Promise<Partial<ObjectRecord>[]> {
     if (recordsToInsert.length === 0) {
@@ -383,7 +460,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
   }: {
     repository: WorkspaceRepository<ObjectLiteral>;
     flatObjectMetadata: FlatObjectMetadata;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     args: CreateManyQueryArgs;
     conflictingFieldGroups: ConflictingFieldGroup[];
   }): Promise<PartialObjectRecordWithId[]> {
@@ -438,13 +515,15 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     flatFieldMetadataMaps,
     result,
     columnsToReturn,
+    shareWith,
     queryRunnerContext,
   }: {
     partialRecordsToUpdate: PartialObjectRecordWithId[];
     flatObjectMetadata: FlatObjectMetadata;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     result: InsertResult;
     columnsToReturn: string[];
+    shareWith?: ShareWithInput[];
     queryRunnerContext: CommonExtendedQueryRunnerContext;
   }): Promise<void> {
     const updateInputs = partialRecordsToUpdate
@@ -461,8 +540,9 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
       }));
 
     const writeRepository = this.getWriteRepository(queryRunnerContext);
-    const resolvedData = await this.resolveNestedRelations({
+    const resolvedData = await this.resolveNestedRelationsForCreate({
       records: updateInputs.map((input) => input.data),
+      shareWith,
       queryRunnerContext,
       writeRepository,
     });
@@ -487,11 +567,13 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     recordsToInsert,
     result,
     columnsToReturn,
+    shareWith,
     queryRunnerContext,
   }: {
     recordsToInsert: Partial<ObjectRecord>[];
     result: InsertResult;
     columnsToReturn: string[];
+    shareWith?: ShareWithInput[];
     queryRunnerContext: CommonExtendedQueryRunnerContext;
   }): Promise<void> {
     if (recordsToInsert.length === 0) {
@@ -501,17 +583,128 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     const writeRepository = this.getWriteRepository(queryRunnerContext);
 
     const insertResult = await writeRepository.runInsert({
-      records: await this.resolveNestedRelations({
+      records: await this.resolveNestedRelationsForCreate({
         records: recordsToInsert,
+        shareWith,
         queryRunnerContext,
         writeRepository,
       }),
       columnsToReturn,
     });
 
+    await this.insertRecordShares({
+      insertResult,
+      shareWith,
+      queryRunnerContext,
+    });
+
     result.identifiers.push(...insertResult.identifiers);
     result.generatedMaps.push(...insertResult.generatedMaps);
     result.raw.push(...insertResult.raw);
+  }
+
+  private async insertRecordShares({
+    insertResult,
+    shareWith,
+    queryRunnerContext,
+  }: {
+    insertResult: InsertResult;
+    shareWith?: ShareWithInput[];
+    queryRunnerContext: CommonExtendedQueryRunnerContext;
+  }): Promise<void> {
+    const { authContext, flatObjectMetadata, repository, transactionScope } =
+      queryRunnerContext;
+    const objectSharing = resolveObjectSharing(queryRunnerContext);
+    const shareWithToWrite = resolveShareWithToWrite({
+      sharingMode: objectSharing.sharingMode,
+      shareWith,
+    });
+
+    if (!isDefined(shareWithToWrite)) {
+      return;
+    }
+
+    if (!isDefined(transactionScope)) {
+      throw new CommonQueryRunnerException(
+        'Record shares of created records must be written in their transaction',
+        CommonQueryRunnerExceptionCode.INTERNAL_SERVER_ERROR,
+        { userFriendlyMessage: STANDARD_ERROR_MESSAGE },
+      );
+    }
+
+    await this.shareWithService.insertRecordSharesForCreatedRecords({
+      authContext,
+      flatObjectMetadata,
+      objectSharing,
+      recordIds: insertResult.generatedMaps.map((record) => record.id),
+      apiKeyRoleMap: repository.internalContext.apiKeyRoleMap,
+      shareWith: shareWithToWrite,
+      transactionScope,
+    });
+  }
+
+  private resolveNestedRelationsForCreate({
+    records,
+    shareWith,
+    queryRunnerContext,
+    writeRepository,
+  }: {
+    records: Partial<ObjectRecord>[];
+    shareWith?: ShareWithInput[];
+    queryRunnerContext: CommonExtendedQueryRunnerContext;
+    writeRepository: WorkspaceRepository;
+  }): Promise<Partial<ObjectRecord>[]> {
+    const nestedCreateRecordsCounter =
+      (queryRunnerContext.nestedCreateRecordsCounter ??= { count: 0 });
+
+    return this.resolveNestedRelations({
+      records,
+      queryRunnerContext,
+      writeRepository,
+      createRecords: async ({
+        targetObjectMetadata,
+        records: targetRecords,
+      }) => {
+        nestedCreateRecordsCounter.count += targetRecords.length;
+
+        if (nestedCreateRecordsCounter.count > QUERY_MAX_RECORDS) {
+          throw new CommonQueryRunnerException(
+            `Maximum number of nested records to create is ${QUERY_MAX_RECORDS}.`,
+            CommonQueryRunnerExceptionCode.TOO_MANY_RECORDS_TO_UPDATE,
+            {
+              userFriendlyMessage: msg`Maximum number of nested records to create is ${QUERY_MAX_RECORDS}.`,
+            },
+          );
+        }
+
+        const nestedOperationDepth =
+          (queryRunnerContext.nestedOperationDepth ?? 0) + 1;
+
+        if (nestedOperationDepth > MAX_NESTED_RELATION_CREATE_DEPTH) {
+          throw new CommonQueryRunnerException(
+            `Nested relation create depth cannot exceed ${MAX_NESTED_RELATION_CREATE_DEPTH}`,
+            CommonQueryRunnerExceptionCode.INVALID_ARGS_DATA,
+            { userFriendlyMessage: STANDARD_ERROR_MESSAGE },
+          );
+        }
+
+        const { results } = await this.execute(
+          {
+            data: targetRecords,
+            shareWith,
+            selectedFields: { id: true },
+          },
+          {
+            ...queryRunnerContext,
+            flatObjectMetadata: targetObjectMetadata,
+            nestedCreateRecordsCounter,
+            nestedOperationDepth,
+          },
+        );
+
+        return results;
+      },
+    });
   }
 
   private async fetchUpsertedRecords({
@@ -525,7 +718,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     objectRecords: InsertResult;
     flatObjectMetadata: FlatObjectMetadata;
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     repository: WorkspaceRepository<ObjectLiteral>;
     selectedFieldsResult: CommonSelectedFieldsResult;
   }): Promise<ObjectRecord[]> {
@@ -567,7 +760,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     queryResult: ObjectRecord[],
     flatObjectMetadata: FlatObjectMetadata,
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>,
     authContext: WorkspaceAuthContext,
   ): Promise<ObjectRecord[]> {
     return await this.commonResultGettersService.processRecordArray(
@@ -582,7 +775,7 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
   private getRecordWithoutCreatedBy(
     record: PartialObjectRecordWithId,
     flatObjectMetadata: FlatObjectMetadata,
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>,
   ): Omit<PartialObjectRecordWithId, 'createdBy'> {
     let recordWithoutCreatedByUpdate = record;
 
@@ -611,5 +804,28 @@ export class CommonCreateManyQueryRunnerService extends CommonBaseQueryRunnerSer
     }
 
     return recordWithoutCreatedByUpdate;
+  }
+
+  protected override computeQueryComplexityV2(
+    selectedFieldsResult: CommonSelectedFieldsResult,
+    args: CommonExtendedInput<CreateManyQueryArgs>,
+    queryRunnerContext: CommonBaseQueryRunnerContext,
+  ): number {
+    const {
+      flatObjectMetadata,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+    } = queryRunnerContext;
+
+    return (
+      args.data.length *
+      computeMaxFieldCountPerRecord({
+        selectedFieldsResult,
+        flatObjectMetadata,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+        recordLimitPerOneToManyRelation: args.upsert ? QUERY_MAX_RECORDS : 0,
+      })
+    );
   }
 }

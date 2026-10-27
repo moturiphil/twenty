@@ -14,7 +14,6 @@ import {
   IsNull,
   LessThanOrEqual,
   MoreThan,
-  Not,
   Raw,
   Repository,
 } from 'typeorm';
@@ -43,7 +42,7 @@ import {
   WorkspaceInvitationExceptionCode,
 } from 'src/engine/core-modules/workspace-invitation/workspace-invitation.exception';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
-import { RoleValidationService } from 'src/engine/metadata-modules/role-validation/services/role-validation.service';
+import { RoleAssignmentValidationService } from 'src/engine/metadata-modules/role-assignment-validation/services/role-assignment-validation.service';
 import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 import { CustomException } from 'src/utils/custom-exception';
 
@@ -54,7 +53,7 @@ export class WorkspaceInvitationService {
     private readonly appTokenRepository: Repository<AppTokenEntity>,
     @InjectRepository(UserWorkspaceEntity)
     private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
-    private readonly roleValidationService: RoleValidationService,
+    private readonly roleAssignmentValidationService: RoleAssignmentValidationService,
     private readonly twentyConfigService: TwentyConfigService,
     private readonly emailService: EmailService,
     private readonly onboardingService: OnboardingService,
@@ -84,7 +83,10 @@ export class WorkspaceInvitationService {
         throw new Error('Invalid invitation token');
       }
 
-      if (!appToken.context?.email || appToken.context?.email !== email) {
+      if (
+        !appToken.context?.email ||
+        appToken.context.email.toLowerCase() !== email.toLowerCase()
+      ) {
         throw new Error('Email does not match the invitation');
       }
 
@@ -108,7 +110,9 @@ export class WorkspaceInvitationService {
       .where('"appToken".type IN (:...types)', {
         types: INVITATION_APP_TOKEN_TYPES,
       })
-      .andWhere('"appToken".context->>\'email\' = :email', { email })
+      .andWhere('lower("appToken".context->>\'email\') = lower(:email)', {
+        email,
+      })
       .andWhere('appToken.deletedAt IS NULL')
       .andWhere('appToken.expiresAt > :now', {
         now: new Date(),
@@ -123,7 +127,9 @@ export class WorkspaceInvitationService {
         type: In(INVITATION_APP_TOKEN_TYPES),
         deletedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
-        context: Raw((alias) => `${alias} ->> 'email' = :email`, { email }),
+        context: Raw((alias) => `lower(${alias} ->> 'email') = lower(:email)`, {
+          email,
+        }),
       },
     });
   }
@@ -170,7 +176,7 @@ export class WorkspaceInvitationService {
   ) {
     const maybeWorkspaceInvitation = await this.getOneWorkspaceInvitation(
       workspace.id,
-      email.toLowerCase(),
+      email,
     );
 
     if (maybeWorkspaceInvitation) {
@@ -203,8 +209,8 @@ export class WorkspaceInvitationService {
       workspaceId: workspace.id,
       type: In(INVITATION_APP_TOKEN_TYPES),
       expiresAt: LessThanOrEqual(new Date()),
-      context: Raw((alias) => `${alias} ->> 'email' = :email`, {
-        email: email.toLowerCase(),
+      context: Raw((alias) => `lower(${alias} ->> 'email') = lower(:email)`, {
+        email,
       }),
     });
 
@@ -299,9 +305,8 @@ export class WorkspaceInvitationService {
     }
 
     if (isDefined(roleId)) {
-      await this.roleValidationService.validateRoleAssignableToUsersOrThrow(
-        roleId,
-        workspace.id,
+      await this.roleAssignmentValidationService.validateRoleAssignableToUsersOrThrow(
+        { roleId, workspaceId: workspace.id },
       );
     }
 
@@ -312,14 +317,6 @@ export class WorkspaceInvitationService {
           userId: sender.userId,
           workspaceId: workspace.id,
         })));
-
-    if (isOnboardingInviteReward) {
-      await this.throwIfOnboardingInvitationLimitReached({
-        workspaceId: workspace.id,
-        requestedCount: emails.length,
-        excludedAppTokenId: appTokenIdToInvalidate,
-      });
-    }
 
     await this.throttleInvitationSending(workspace.id, emails);
 
@@ -483,42 +480,6 @@ export class WorkspaceInvitationService {
     });
 
     return this.appTokenRepository.save(invitationToken);
-  }
-
-  private async throwIfOnboardingInvitationLimitReached({
-    workspaceId,
-    requestedCount,
-    excludedAppTokenId,
-  }: {
-    workspaceId: string;
-    requestedCount: number;
-    excludedAppTokenId?: string;
-  }) {
-    const maxOnboardingInvitations = this.twentyConfigService.get(
-      'ONBOARDING_INVITE_TEAM_MAX_INVITES',
-    );
-
-    const existingOnboardingInvitations = await this.appTokenRepository.count({
-      where: {
-        workspaceId,
-        type: AppTokenType.OnboardingInvitationToken,
-        deletedAt: IsNull(),
-        expiresAt: MoreThan(new Date()),
-        ...(isDefined(excludedAppTokenId)
-          ? { id: Not(excludedAppTokenId) }
-          : {}),
-      },
-    });
-
-    if (
-      existingOnboardingInvitations + requestedCount >
-      maxOnboardingInvitations
-    ) {
-      throw new WorkspaceInvitationException(
-        `Onboarding invitation limit (${maxOnboardingInvitations}) reached for workspace ${workspaceId}`,
-        WorkspaceInvitationExceptionCode.TOO_MANY_ONBOARDING_INVITATIONS,
-      );
-    }
   }
 
   private async throttleInvitationSending(

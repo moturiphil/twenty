@@ -18,15 +18,21 @@ export const buildUsageEventEnvelopes = (
       periodStart: usageEvent.periodStart
         ? formatDateTimeForClickHouse(usageEvent.periodStart)
         : undefined,
-      userWorkspaceId: usageEvent.userWorkspaceId ?? '',
+      userWorkspaceId: usageEvent.spenders?.userWorkspaceId ?? '',
+      apiKeyId: usageEvent.spenders?.apiKeyId ?? '',
+      applicationId: usageEvent.spenders?.applicationId ?? '',
+      agentId: usageEvent.spenders?.agentId ?? '',
+      workflowId: usageEvent.spenders?.workflowId ?? '',
+      logicFunctionId: usageEvent.spenders?.logicFunctionId ?? '',
       resourceType: usageEvent.resourceType,
       operationType: usageEvent.operationType,
       quantity: usageEvent.quantity,
       unit: usageEvent.unit,
       creditsUsedMicro: usageEvent.creditsUsedMicro,
+      userCreditsUsedMicro: usageEvent.userCreditsUsedMicro ?? 0,
       resourceId: usageEvent.resourceId ?? '',
       resourceContext: usageEvent.resourceContext ?? '',
-      metadata: {},
+      metadata: usageEvent.metadata ?? {},
     },
   }));
 };

@@ -2,6 +2,8 @@ import { type ObjectRecordBaseEvent } from 'twenty-shared/database-events';
 import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
 
+import { type TimelineActivityRuleAction } from 'src/modules/timeline/types/timeline-activity-rule-action.type';
+
 const parseTimestamp = (value: unknown): Date | undefined => {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? undefined : value;
@@ -33,4 +35,28 @@ export const resolveTimelineActivityHappensAt = (
   const recordTimestamp = parseTimestamp(getRecordTimestamp(record));
 
   return isDefined(recordTimestamp) ? recordTimestamp : new Date();
+};
+
+export const parseLinkedTimelineActivityHappensAt = (
+  value: unknown,
+): Date | undefined => parseTimestamp(value);
+
+// Synced records anchor at their own moment (email received, event start), not when a sync wrote the row
+export const resolveLinkedTimelineActivityHappensAt = ({
+  event,
+  ruleAction,
+  happensAtFieldName,
+  sourceRecord,
+}: {
+  event: ObjectRecordBaseEvent;
+  ruleAction: TimelineActivityRuleAction;
+  happensAtFieldName: string | null;
+  sourceRecord: Record<string, unknown> | undefined;
+}): Date => {
+  const sourceRecordHappensAt =
+    ruleAction === 'linked' && isDefined(happensAtFieldName)
+      ? parseTimestamp(sourceRecord?.[happensAtFieldName])
+      : undefined;
+
+  return sourceRecordHappensAt ?? resolveTimelineActivityHappensAt(event);
 };

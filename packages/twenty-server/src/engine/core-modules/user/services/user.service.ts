@@ -43,11 +43,16 @@ import {
   PermissionsExceptionCode,
   PermissionsExceptionMessage,
 } from 'src/engine/metadata-modules/permissions/permissions.exception';
-import { ConnectedAccountMetadataService } from 'src/engine/metadata-modules/connected-account/connected-account-metadata.service';
+import { RecordShareOwnershipTransferService } from 'src/engine/core-modules/record-share/services/record-share-ownership-transfer.service';
+import { ConnectedAccountOwnershipTransferService } from 'src/engine/metadata-modules/connected-account/services/connected-account-ownership-transfer.service';
+import { detachAgentChatChannelThreadsFromWorkspaceMember } from 'src/engine/metadata-modules/ai/ai-chat/utils/detach-agent-chat-channel-threads-from-workspace-member.util';
+import { AgentChatThreadWorkspaceEntity } from 'src/engine/metadata-modules/ai/ai-history/standard-objects/agent-chat-thread.workspace-entity';
+import { AgentHistoryRepository } from 'src/engine/metadata-modules/ai/ai-history/repositories/agent-history-repository';
+import { InjectAgentHistoryRepository } from 'src/engine/metadata-modules/ai/ai-history/repositories/inject-agent-history-repository.decorator';
 import { UserRoleService } from 'src/engine/metadata-modules/user-role/user-role.service';
 import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
-import { STANDARD_ROLE } from 'src/engine/workspace-manager/twenty-standard-application/constants/standard-role.constant';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 // oxlint-disable-next-line twenty/inject-workspace-repository
@@ -55,9 +60,8 @@ export class UserService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
-    @InjectRepository(UserWorkspaceEntity)
-    private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
-    private readonly connectedAccountMetadataService: ConnectedAccountMetadataService,
+    private readonly connectedAccountOwnershipTransferService: ConnectedAccountOwnershipTransferService,
+    private readonly recordShareOwnershipTransferService: RecordShareOwnershipTransferService,
     private readonly workspaceDomainsService: WorkspaceDomainsService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly workspaceService: WorkspaceService,
@@ -69,6 +73,9 @@ export class UserService {
     private readonly coreEntityCacheService: CoreEntityCacheService,
     private readonly workspaceMemberTranspiler: WorkspaceMemberTranspiler,
     private readonly twentyConfigService: TwentyConfigService,
+    private readonly workspaceCacheService: WorkspaceCacheService,
+    @InjectAgentHistoryRepository('agentChatThread')
+    private readonly agentChatThreadRepository: AgentHistoryRepository<AgentChatThreadWorkspaceEntity>,
   ) {}
 
   async refreshWorkspaceIfPendingOrOngoingCreation<
@@ -378,19 +385,32 @@ export class UserService {
 
     assert(workspaceMember, 'WorkspaceMember not found');
 
-    const custodianUserWorkspaceId =
-      await this.resolveConnectedAccountsCustodianUserWorkspaceId({
+    await this.connectedAccountOwnershipTransferService.transferConnectedAccountsOwnershipToCustodian(
+      {
         removedUserWorkspace: userWorkspace,
         actingUserWorkspaceId,
-      });
+      },
+    );
 
-    if (isDefined(custodianUserWorkspaceId)) {
-      await this.connectedAccountMetadataService.transferOwnership({
-        fromUserWorkspaceId: userWorkspaceId,
-        toUserWorkspaceId: custodianUserWorkspaceId,
-        workspaceId,
-      });
-    }
+    await this.recordShareOwnershipTransferService.transferRecordSharesToCustodian(
+      {
+        removedUserWorkspace: userWorkspace,
+        removedWorkspaceMemberId: workspaceMember.id,
+        actingUserWorkspaceId,
+      },
+    );
+
+    const { flatFieldMetadataMaps } =
+      await this.workspaceCacheService.getOrRecompute(workspaceId, [
+        'flatFieldMetadataMaps',
+      ]);
+
+    await detachAgentChatChannelThreadsFromWorkspaceMember({
+      threadRepository: this.agentChatThreadRepository,
+      flatFieldMetadataMaps,
+      workspaceId,
+      workspaceMemberId: workspaceMember.id,
+    });
 
     await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
       const workspaceMemberRepository =
@@ -408,55 +428,15 @@ export class UserService {
       userWorkspaceId,
       workspaceId,
     });
-  }
 
-  private async resolveConnectedAccountsCustodianUserWorkspaceId({
-    removedUserWorkspace,
-    actingUserWorkspaceId,
-  }: {
-    removedUserWorkspace: UserWorkspaceEntity;
-    actingUserWorkspaceId?: string;
-  }): Promise<string | undefined> {
-    const otherUserWorkspaces = await this.userWorkspaceRepository.find({
-      where: {
-        workspaceId: removedUserWorkspace.workspaceId,
-        id: Not(removedUserWorkspace.id),
-      },
-      order: { createdAt: 'ASC' },
+    await this.workspaceCacheService.invalidateAndRecompute(workspaceId, [
+      'flatWorkspaceMemberMaps',
+    ]);
+
+    // After the membership is gone, so a failed removal keeps the history and threads created meanwhile are cleaned.
+    await this.agentChatThreadRepository.delete(workspaceId, {
+      workspaceMemberId: workspaceMember.id,
     });
-
-    if (otherUserWorkspaces.length === 0) {
-      return undefined;
-    }
-
-    const actingUserWorkspace = otherUserWorkspaces.find(
-      (otherUserWorkspace) => otherUserWorkspace.id === actingUserWorkspaceId,
-    );
-
-    if (isDefined(actingUserWorkspace)) {
-      return actingUserWorkspace.id;
-    }
-
-    const rolesByUserWorkspaceId =
-      await this.userRoleService.getRolesByUserWorkspaces({
-        userWorkspaceIds: otherUserWorkspaces.map(
-          (otherUserWorkspace) => otherUserWorkspace.id,
-        ),
-        workspaceId: removedUserWorkspace.workspaceId,
-      });
-
-    const oldestAdminUserWorkspace = otherUserWorkspaces.find(
-      (otherUserWorkspace) =>
-        rolesByUserWorkspaceId
-          .get(otherUserWorkspace.id)
-          ?.some(
-            (role) =>
-              role.universalIdentifier ===
-              STANDARD_ROLE.admin.universalIdentifier,
-          ),
-    );
-
-    return (oldestAdminUserWorkspace ?? otherUserWorkspaces[0]).id;
   }
 
   async hasUserAccessToWorkspaceOrThrow(userId: string, workspaceId: string) {

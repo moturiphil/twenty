@@ -80,12 +80,21 @@ async function runMigrations() {
   const dir = path.join(__dirname);
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql'));
 
+  if (files.length === 0) {
+    throw new Error(
+      `No .sql migration file in ${dir}: the build did not copy the ClickHouse migrations`,
+    );
+  }
+
   await ensureDatabaseExists();
 
   const client = createClient({
     url: clickHouseUrl(),
     clickhouse_settings: {
       allow_experimental_json_type: 1,
+      // Without waiting on all replicas, the next ALTER fails with CANNOT_ASSIGN_ALTER
+      alter_sync: '2',
+      mutations_sync: '2',
     },
     log: { level: ClickHouseLogLevel.OFF },
   });

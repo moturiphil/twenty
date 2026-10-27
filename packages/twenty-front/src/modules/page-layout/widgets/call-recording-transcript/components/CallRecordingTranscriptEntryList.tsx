@@ -2,6 +2,7 @@ import { CallRecordingTranscriptEntryListItem } from '@/page-layout/widgets/call
 import { CallRecordingTranscriptFollowScrollEffect } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingTranscriptFollowScrollEffect';
 import { type CallRecordingTranscriptPlayback } from '@/page-layout/widgets/call-recording-transcript/types/CallRecordingTranscriptPlayback';
 import { getCallRecordingTranscriptEntryPlaybackPhase } from '@/page-layout/widgets/call-recording-transcript/utils/getCallRecordingTranscriptEntryPlaybackPhase';
+import { ScrollOverlayButton } from '@/ui/utilities/scroll/components/ScrollOverlayButton';
 import { styled } from '@linaria/react';
 import { t } from '@lingui/core/macro';
 import {
@@ -13,8 +14,8 @@ import {
 } from 'react';
 import { type CallRecordingParsedTranscriptEntry } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
-import { Button } from 'twenty-ui/input';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledTranscriptContainer = styled.div`
   height: 100%;
@@ -40,14 +41,7 @@ const StyledEntryList = styled.ul<{ hasPlaybackControls: boolean }>`
       : '0'};
 `;
 
-const StyledResumeFollowButton = styled.div`
-  bottom: ${themeCssVariables.spacing[3]};
-  left: 50%;
-  position: absolute;
-  transform: translateX(-50%);
-`;
-
-const MANUAL_SCROLL_KEYS = [
+const MANUAL_SCROLL_KEYS = doNotTranslate([
   'ArrowDown',
   'ArrowUp',
   'End',
@@ -55,7 +49,7 @@ const MANUAL_SCROLL_KEYS = [
   'PageDown',
   'PageUp',
   ' ',
-];
+]);
 
 type CallRecordingTranscriptEntryListProps = {
   entries: CallRecordingParsedTranscriptEntry[];
@@ -107,8 +101,8 @@ export const CallRecordingTranscriptEntryList = ({
         activeEntryElementRef={activeEntryElementRef}
         isFollowingPlayback={isFollowingPlayback}
         scrollContainerElementRef={scrollContainerElementRef}
-        videoElement={playback?.videoElement}
-        onVideoSeeking={resumeFollowingPlayback}
+        mediaElement={playback?.mediaElement}
+        onMediaSeeking={resumeFollowingPlayback}
       />
       <StyledTranscriptScrollContainer
         ref={scrollContainerElementRef}
@@ -134,23 +128,20 @@ export const CallRecordingTranscriptEntryList = ({
                 entry={entry}
                 entryElementRef={isActive ? activeEntryElementRef : undefined}
                 playbackPhase={playbackPhase}
-                videoElement={playback?.videoElement}
+                mediaElement={playback?.mediaElement}
                 onSelect={hasPlayback ? selectTranscriptEntry : undefined}
               />
             );
           })}
         </StyledEntryList>
       </StyledTranscriptScrollContainer>
-      {hasPlayback && !isFollowingPlayback && (
-        <StyledResumeFollowButton>
-          <Button
-            ariaLabel={t`Jump to current`}
-            size="small"
-            title={t`Jump to current`}
-            variant="secondary"
-            onClick={resumeFollowingPlayback}
-          />
-        </StyledResumeFollowButton>
+      {hasPlayback && (
+        <ScrollOverlayButton
+          ariaLabel={t`Jump to current`}
+          isVisible={!isFollowingPlayback}
+          title={t`Jump to current`}
+          onClick={resumeFollowingPlayback}
+        />
       )}
     </StyledTranscriptContainer>
   );

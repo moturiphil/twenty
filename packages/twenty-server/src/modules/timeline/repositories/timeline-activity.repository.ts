@@ -1,19 +1,24 @@
 import { Injectable } from '@nestjs/common';
 
+import chunk from 'lodash.chunk';
+import { QUERY_MAX_RECORDS } from 'twenty-shared/constants';
 import { type ObjectRecord } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { In, MoreThan, type ObjectLiteral } from 'typeorm';
 
+import { POSTGRESQL_ERROR_CODES } from 'src/engine/api/graphql/workspace-query-runner/constants/postgres-error-codes.constants';
 import { objectRecordDiffMerge } from 'src/engine/core-modules/event-emitter/utils/object-record-diff-merge';
 import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { type WorkspaceTransactionScope } from 'src/engine/twenty-orm/types/workspace-transaction-scope.type';
 import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
 import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
-import { type TimelineActivityPayload } from 'src/modules/timeline/types/timeline-activity-payload';
+import { type TimelineActivityPayload } from 'src/modules/timeline/types/timeline-activity-payload.type';
+import { type LinkedTimelineActivityHappensAtSyncUpdate } from 'src/modules/timeline/utils/build-linked-timeline-activity-happens-at-sync-updates.util';
 import {
   buildTimelineActivityMergeKey,
   buildTimelineActivityMergeKeyCandidates,
 } from 'src/modules/timeline/utils/build-timeline-activity-merge-key.util';
+import { parseLinkedTimelineActivityHappensAt } from 'src/modules/timeline/utils/resolve-timeline-activity-happens-at.util';
 import { buildTimelineActivityRelatedMorphFieldMetadataName } from 'src/modules/timeline/utils/timeline-activity-related-morph-field-metadata-name-builder.util';
 
 type TimelineActivityPayloadWorkspaceIdAndObjectSingularName = {
@@ -28,15 +33,133 @@ const ACQUIRE_TIMELINE_ACTIVITY_MERGE_LOCK = `SELECT pg_advisory_xact_lock(hasht
    FROM unnest($1::text[]) WITH ORDINALITY AS "locks"("lockName", "ordinality")
    ORDER BY "ordinality"`;
 
+const isForeignKeyViolation = (error: unknown): boolean =>
+  (error as Error & { cause?: { code?: unknown } }).cause?.code ===
+  POSTGRESQL_ERROR_CODES.FOREIGN_KEY_VIOLATION;
+
 @Injectable()
 export class TimelineActivityRepository {
   constructor(private readonly workspaceOrmManager: WorkspaceOrmManager) {}
 
-  async upsertTimelineActivities({
+  async upsertTimelineActivities(
+    args: TimelineActivityPayloadWorkspaceIdAndObjectSingularName,
+  ) {
+    try {
+      await this.upsertTimelineActivitiesOnce({
+        ...args,
+        shouldFilterMissingTargets: false,
+      });
+    } catch (error) {
+      if (!isForeignKeyViolation(error)) {
+        throw error;
+      }
+
+      await this.upsertTimelineActivitiesOnce({
+        ...args,
+        shouldFilterMissingTargets: true,
+      });
+    }
+  }
+
+  async updateLinkedTimelineActivitiesHappensAt({
+    workspaceId,
+    updates,
+  }: {
+    workspaceId: string;
+    updates: LinkedTimelineActivityHappensAtSyncUpdate[];
+  }) {
+    if (updates.length === 0) {
+      return;
+    }
+
+    const authContext = buildSystemAuthContext(workspaceId);
+
+    await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
+      for (const update of updates) {
+        await this.syncLinkedTimelineActivitiesHappensAtFromSourceRecords(
+          update,
+        );
+      }
+    }, authContext);
+  }
+
+  private async syncLinkedTimelineActivitiesHappensAtFromSourceRecords({
+    sourceObjectNameSingular,
+    happensAtFieldName,
+    timelineActivityTypeIds,
+    linkedRecordIds,
+  }: LinkedTimelineActivityHappensAtSyncUpdate) {
+    const sourceRepository =
+      this.workspaceOrmManager.getRepository<ObjectLiteral>(
+        sourceObjectNameSingular,
+        { shouldBypassPermissionChecks: true },
+      );
+
+    // Queue retries can replay an older event, so read the value from the source row rather than the event snapshot
+    const sourceRecords = await sourceRepository.find({
+      select: ['id', happensAtFieldName],
+      where: { id: In(linkedRecordIds) },
+    });
+
+    const happensAtByLinkedRecordId = new Map<string, Date>();
+
+    for (const sourceRecord of sourceRecords) {
+      const happensAt = parseLinkedTimelineActivityHappensAt(
+        sourceRecord[happensAtFieldName],
+      );
+
+      // A cleared timestamp keeps the previously written happensAt
+      if (isDefined(happensAt)) {
+        happensAtByLinkedRecordId.set(sourceRecord.id, happensAt);
+      }
+    }
+
+    if (happensAtByLinkedRecordId.size === 0) {
+      return;
+    }
+
+    const timelineActivityRepository =
+      this.workspaceOrmManager.getRepository<ObjectLiteral>(
+        'timelineActivity',
+        { shouldBypassPermissionChecks: true },
+      );
+
+    const timelineActivities = await timelineActivityRepository.find({
+      select: ['id', 'linkedRecordId', 'happensAt'],
+      where: {
+        linkedRecordId: In([...happensAtByLinkedRecordId.keys()]),
+        timelineActivityTypeId: In(timelineActivityTypeIds),
+      },
+    });
+
+    const updateInputs = timelineActivities.flatMap((timelineActivity) => {
+      const happensAt = happensAtByLinkedRecordId.get(
+        timelineActivity.linkedRecordId,
+      );
+
+      if (
+        !isDefined(happensAt) ||
+        new Date(timelineActivity.happensAt).getTime() === happensAt.getTime()
+      ) {
+        return [];
+      }
+
+      return [{ criteria: timelineActivity.id, partialEntity: { happensAt } }];
+    });
+
+    for (const updateInputsChunk of chunk(updateInputs, QUERY_MAX_RECORDS)) {
+      await timelineActivityRepository.updateMany(updateInputsChunk);
+    }
+  }
+
+  private async upsertTimelineActivitiesOnce({
     objectSingularName,
     workspaceId,
     payloads,
-  }: TimelineActivityPayloadWorkspaceIdAndObjectSingularName) {
+    shouldFilterMissingTargets,
+  }: TimelineActivityPayloadWorkspaceIdAndObjectSingularName & {
+    shouldFilterMissingTargets: boolean;
+  }) {
     const authContext = buildSystemAuthContext(workspaceId);
 
     await this.workspaceOrmManager.executeInWorkspaceContext(async () => {
@@ -73,8 +196,7 @@ export class TimelineActivityRepository {
           const timelineActivityPropertyName =
             this.getTimelineActivityPropertyName(objectSingularName);
 
-          // Bucketed once so matching a payload stays constant time: the recent
-          // window is scoped to this batch but is not capped in size.
+          // The recent window is not capped in size, so bucket it once for constant-time matching
           const recentTimelineActivitiesByMergeKey = new Map<
             string,
             (typeof recentTimelineActivities)[number][]
@@ -115,8 +237,8 @@ export class TimelineActivityRepository {
                 )
                 .find(
                   (timelineActivity) =>
-                    !isDefined(payload.linkedRecordId) ||
-                    timelineActivity.linkedRecordId === payload.linkedRecordId,
+                    (timelineActivity.linkedRecordId ?? null) ===
+                    (payload.linkedRecordId ?? null),
                 );
 
             if (isDefined(recentTimelineActivity)) {
@@ -139,6 +261,14 @@ export class TimelineActivityRepository {
             }
           }
 
+          const insertablePayloads = shouldFilterMissingTargets
+            ? await this.filterPayloadsWithExistingTarget({
+                transactionScope,
+                objectSingularName,
+                payloads: payloadsToInsert,
+              })
+            : payloadsToInsert;
+
           await Promise.all([
             this.updateTimelineActivities({
               timelineActivityRepository,
@@ -147,12 +277,45 @@ export class TimelineActivityRepository {
             this.insertTimelineActivities({
               timelineActivityRepository,
               objectSingularName,
-              payloads: payloadsToInsert,
+              payloads: insertablePayloads,
             }),
           ]);
         },
       );
     }, authContext);
+  }
+
+  private async filterPayloadsWithExistingTarget({
+    transactionScope,
+    objectSingularName,
+    payloads,
+  }: {
+    transactionScope: WorkspaceTransactionScope;
+    objectSingularName: string;
+    payloads: TimelineActivityPayloadWorkspaceIdAndObjectSingularName['payloads'];
+  }) {
+    if (payloads.length === 0) {
+      return payloads;
+    }
+
+    const targetRepository = transactionScope.getRepository<ObjectLiteral>(
+      objectSingularName,
+      { shouldBypassPermissionChecks: true },
+    );
+
+    const existingRecords = await targetRepository.find({
+      select: ['id'],
+      where: { id: In(payloads.map((payload) => payload.recordId)) },
+      withDeleted: true,
+    });
+
+    const existingRecordIds = new Set(
+      existingRecords.map((record) => record.id),
+    );
+
+    return payloads.filter((payload) =>
+      existingRecordIds.has(payload.recordId),
+    );
   }
 
   private async acquireMergeLocks({
@@ -176,6 +339,7 @@ export class TimelineActivityRepository {
             payload.recordId,
             payload.workspaceMemberId ?? null,
             payload.timelineActivityTypeId,
+            payload.linkedRecordId ?? null,
           ]),
         ),
       ),
@@ -211,9 +375,13 @@ export class TimelineActivityRepository {
       createdAt: MoreThan(tenMinutesAgo),
     };
 
-    // The where clause is already scoped to this batch payloads and to the merge
-    // window, so every candidate is fetched: taking a single row would let only
-    // one payload of a multi record batch merge.
+    const linkedRecordIds = payloads.map((payload) => payload.linkedRecordId);
+
+    if (linkedRecordIds.every(isDefined)) {
+      whereConditions.linkedRecordId = In(linkedRecordIds);
+    }
+
+    // Every candidate is needed: a single row would let only one payload of a multi-record batch merge
     return await timelineActivityRepository.find({
       where: {
         ...whereConditions,

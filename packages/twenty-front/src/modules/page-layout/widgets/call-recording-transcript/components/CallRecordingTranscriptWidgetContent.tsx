@@ -1,7 +1,7 @@
-import { useCalendarEventCallRecording } from '@/page-layout/widgets/calendar-event-call-recording/hooks/useCalendarEventCallRecording';
-import { getCallRecordingVideoFileUrl } from '@/page-layout/widgets/calendar-event-call-recording/utils/getCallRecordingVideoFileUrl';
+import { useCallRecordingWidgetData } from '@/page-layout/widgets/call-recording/hooks/useCallRecordingWidgetData';
+import { useCallRecordingWidgetTarget } from '@/page-layout/widgets/call-recording/hooks/useCallRecordingWidgetTarget';
+import { getCallRecordingPlaybackMedia } from '@/page-layout/widgets/call-recording/utils/getCallRecordingPlaybackMedia';
 import { CallRecordingTranscriptBody } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingTranscriptBody';
-import { CallRecordingTranscriptHeaderDataEffect } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingTranscriptHeaderDataEffect';
 import { WidgetHeaderCountEffect } from '@/page-layout/widgets/components/WidgetHeaderCountEffect';
 import { useMemo } from 'react';
 import {
@@ -10,49 +10,51 @@ import {
 } from 'twenty-shared/utils';
 
 export const CallRecordingTranscriptWidgetContent = () => {
+  const callRecordingWidgetTarget = useCallRecordingWidgetTarget();
   const {
     callRecording,
     callRecordingsCount,
     loading,
     error,
     restriction,
-    refetch,
-  } = useCalendarEventCallRecording({
-    queryScope: 'call-recording-transcript',
-  });
+    refetchCallRecordingWidget,
+  } = useCallRecordingWidgetData({ kind: 'transcript' });
 
-  const canExposeCallRecordingHeaderData =
+  const canExposeCallRecordingData =
     !loading && !isDefined(error) && !isDefined(restriction);
 
-  const callRecordingForHeader = canExposeCallRecordingHeaderData
+  const callRecordingForDisplay = canExposeCallRecordingData
     ? callRecording
     : undefined;
 
   const transcriptEntries = useMemo(
     () =>
-      parseCallRecordingTranscriptEntries(callRecordingForHeader?.transcript),
-    [callRecordingForHeader?.transcript],
+      parseCallRecordingTranscriptEntries(callRecordingForDisplay?.transcript),
+    [callRecordingForDisplay?.transcript],
   );
 
-  const videoFileUrl = getCallRecordingVideoFileUrl(callRecordingForHeader);
+  const playbackMedia = getCallRecordingPlaybackMedia(callRecordingForDisplay);
+
+  const calendarEventHeaderCount = canExposeCallRecordingData
+    ? callRecordingsCount
+    : 0;
+
+  const headerCount =
+    callRecordingWidgetTarget?.targetKind === 'calendarEvent'
+      ? calendarEventHeaderCount
+      : undefined;
 
   return (
     <>
-      <WidgetHeaderCountEffect
-        count={canExposeCallRecordingHeaderData ? callRecordingsCount : 0}
-      />
-      <CallRecordingTranscriptHeaderDataEffect
-        transcriptEntries={transcriptEntries}
-        videoFileUrl={videoFileUrl}
-      />
+      <WidgetHeaderCountEffect count={headerCount} />
       <CallRecordingTranscriptBody
         callRecording={callRecording}
         transcriptEntries={transcriptEntries}
-        videoFileUrl={videoFileUrl}
+        playbackMedia={playbackMedia}
         loading={loading}
         error={error}
         restriction={restriction}
-        refetchCallRecording={refetch}
+        refetchCallRecording={refetchCallRecordingWidget}
       />
     </>
   );

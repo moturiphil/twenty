@@ -1,6 +1,9 @@
-import { CallRecordingWidgetEmptyStateDisplay } from '@/page-layout/widgets/calendar-event-call-recording/components/CallRecordingWidgetEmptyStateDisplay';
-import { CallRecordingWidgetForbiddenDisplay } from '@/page-layout/widgets/calendar-event-call-recording/components/CallRecordingWidgetForbiddenDisplay';
-import { type CalendarEventCallRecordingCandidate } from '@/page-layout/widgets/calendar-event-call-recording/types/CalendarEventCallRecordingCandidate';
+import { CallRecordingAudioPlayer } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingAudioPlayer';
+import { type CallRecordingPlaybackMedia } from '@/page-layout/widgets/call-recording/types/CallRecordingPlaybackMedia';
+import { CallRecordingStatusDisplay } from '@/page-layout/widgets/call-recording/components/CallRecordingStatusDisplay';
+import { CallRecordingWidgetEmptyStateDisplay } from '@/page-layout/widgets/call-recording/components/CallRecordingWidgetEmptyStateDisplay';
+import { CallRecordingWidgetForbiddenDisplay } from '@/page-layout/widgets/call-recording/components/CallRecordingWidgetForbiddenDisplay';
+import { type WidgetCallRecordingCandidate } from '@/page-layout/widgets/call-recording/types/WidgetCallRecordingCandidate';
 import { CallRecordingTranscriptContent } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingTranscriptContent';
 import { CallRecordingVideoPlayer } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingVideoPlayer';
 import { CallRecordingTranscriptPlaybackEffect } from '@/page-layout/widgets/call-recording-transcript/components/CallRecordingTranscriptPlaybackEffect';
@@ -13,42 +16,73 @@ import { styled } from '@linaria/react';
 import { t } from '@lingui/core/macro';
 import { useState } from 'react';
 import { type CallRecordingParsedTranscriptEntry } from 'twenty-shared/types';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-const StyledRecordingLayout = styled.div`
-  display: grid;
-  flex: 1;
+const StyledRecordingLayout = styled.div<{ hasTranscriptEntries: boolean }>`
+  display: ${({ hasTranscriptEntries }) =>
+    hasTranscriptEntries ? 'grid' : 'flex'};
+  flex: ${({ hasTranscriptEntries }) => (hasTranscriptEntries ? '1' : 'none')};
+  flex-direction: column;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
+  min-height: ${({ hasTranscriptEntries }) =>
+    hasTranscriptEntries ? '0' : '100%'};
+`;
+
+const StyledStatusBelowMedia = styled.div`
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding: ${themeCssVariables.spacing[6]} 0;
 `;
 
 type CallRecordingTranscriptBodyProps = {
-  callRecording: CalendarEventCallRecordingCandidate | undefined;
+  callRecording: WidgetCallRecordingCandidate | undefined;
   transcriptEntries: CallRecordingParsedTranscriptEntry[] | undefined;
-  videoFileUrl: string | undefined;
+  playbackMedia: CallRecordingPlaybackMedia | undefined;
   loading: boolean;
   error: Error | undefined;
   restriction: WidgetAccessDenialInfo | undefined;
-  refetchCallRecording: () => Promise<unknown>;
+  refetchCallRecording: () => Promise<void>;
 };
 
 export const CallRecordingTranscriptBody = ({
   callRecording,
   transcriptEntries,
-  videoFileUrl,
+  playbackMedia,
   loading,
   error,
   restriction,
   refetchCallRecording,
 }: CallRecordingTranscriptBodyProps) => {
   const widget = useCurrentWidget();
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(
+  const [mediaElement, setMediaElement] = useState<HTMLMediaElement | null>(
     null,
   );
 
   const [entryPlaybackPosition, setEntryPlaybackPosition] = useState(
     INITIAL_CALL_RECORDING_TRANSCRIPT_PLAYBACK_POSITION,
   );
+
+  const [pinnedPlaybackMedia, setPinnedPlaybackMedia] = useState(playbackMedia);
+
+  const isPinnedPlaybackMediaCurrent =
+    pinnedPlaybackMedia?.fileId === playbackMedia?.fileId &&
+    pinnedPlaybackMedia?.kind === playbackMedia?.kind;
+
+  if (!isPinnedPlaybackMediaCurrent) {
+    setPinnedPlaybackMedia(playbackMedia);
+  }
+
+  const displayedPlaybackMedia = isPinnedPlaybackMediaCurrent
+    ? pinnedPlaybackMedia
+    : playbackMedia;
+
+  const handleRetry = async () => {
+    await refetchCallRecording();
+    setPinnedPlaybackMedia(undefined);
+  };
 
   if (isDefined(restriction)) {
     return <CallRecordingWidgetForbiddenDisplay restriction={restriction} />;
@@ -65,14 +99,14 @@ export const CallRecordingTranscriptBody = ({
   if (!isDefined(callRecording)) {
     return (
       <CallRecordingWidgetEmptyStateDisplay
-        animatedPlaceholderType="noMatchRecord"
-        title={t`No Call Recording`}
-        subTitle={t`No call recording exists for this calendar event yet.`}
+        animatedPlaceholderType="noCallRecording"
+        title={t`No Transcript`}
+        subTitle={t`No transcript is available for this calendar event yet.`}
       />
     );
   }
 
-  if (!isDefined(videoFileUrl)) {
+  if (!isDefined(displayedPlaybackMedia)) {
     return (
       <CallRecordingTranscriptContent
         callRecording={callRecording}
@@ -81,34 +115,57 @@ export const CallRecordingTranscriptBody = ({
     );
   }
 
-  const playback = isDefined(videoElement)
+  const mediaPlayer =
+    displayedPlaybackMedia.kind === 'video' ? (
+      <CallRecordingVideoPlayer
+        key={displayedPlaybackMedia.fileId}
+        ref={setMediaElement}
+        src={displayedPlaybackMedia.url}
+        onRetry={handleRetry}
+      />
+    ) : (
+      <CallRecordingAudioPlayer
+        key={displayedPlaybackMedia.fileId}
+        ref={setMediaElement}
+        src={displayedPlaybackMedia.url}
+        onRetry={handleRetry}
+      />
+    );
+
+  const hasTranscriptEntries = isNonEmptyArray(transcriptEntries);
+
+  const playback = isDefined(mediaElement)
     ? {
         position: entryPlaybackPosition,
-        videoElement,
+        mediaElement,
         onSeek: (startSeconds: number) => {
-          videoElement.currentTime = startSeconds;
+          mediaElement.currentTime = startSeconds;
         },
       }
     : undefined;
 
   return (
-    <StyledRecordingLayout>
+    <StyledRecordingLayout hasTranscriptEntries={hasTranscriptEntries}>
       <CallRecordingTranscriptPlaybackEffect
-        videoElement={videoElement}
+        mediaElement={mediaElement}
         timedItems={transcriptEntries}
         onPlaybackPositionChange={setEntryPlaybackPosition}
       />
-      <CallRecordingVideoPlayer
-        key={videoFileUrl}
-        ref={setVideoElement}
-        src={videoFileUrl}
-        onRetry={refetchCallRecording}
-      />
-      <CallRecordingTranscriptContent
-        callRecording={callRecording}
-        transcriptEntries={transcriptEntries}
-        playback={playback}
-      />
+      {mediaPlayer}
+      {hasTranscriptEntries ? (
+        <CallRecordingTranscriptContent
+          callRecording={callRecording}
+          transcriptEntries={transcriptEntries}
+          playback={playback}
+        />
+      ) : (
+        <StyledStatusBelowMedia>
+          <CallRecordingStatusDisplay
+            callRecording={callRecording}
+            artifactType="transcript"
+          />
+        </StyledStatusBelowMedia>
+      )}
     </StyledRecordingLayout>
   );
 };

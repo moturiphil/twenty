@@ -11,6 +11,8 @@ import {
   type ConcurrencyLimiter,
   createConcurrencyLimiter,
 } from 'src/engine/api/common/common-nested-relations-processor/utils/create-concurrency-limiter.util';
+import { assignManyToOneRelationRecords } from 'src/engine/api/common/common-nested-relations-processor/utils/assign-many-to-one-relation-records.util';
+import { assignOneToManyRelationRecords } from 'src/engine/api/common/common-nested-relations-processor/utils/assign-one-to-many-relation-records.util';
 import { getUniqueRelationIds } from 'src/engine/api/common/common-nested-relations-processor/utils/get-unique-relation-ids.util';
 import { STANDARD_ERROR_MESSAGE } from 'src/engine/api/common/common-query-runners/errors/standard-error-message.constant';
 import {
@@ -24,13 +26,13 @@ import { type AggregationField } from 'src/engine/api/graphql/workspace-schema-b
 import { type WorkspaceAuthContext } from 'src/engine/core-modules/auth/types/workspace-auth-context.type';
 import { FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
-import { FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type OrmFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/orm-flat-field-metadata.type';
 import {
   buildFieldMapsFromFlatObjectMetadata,
   type FieldMapsForObject,
 } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
 import { FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
-import { type RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config';
+import { type RolePermissionConfig } from 'src/engine/twenty-orm/types/role-permission-config.type';
 import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
 import { type WorkspaceSelectQueryBuilder } from 'src/engine/twenty-orm/query-builder/workspace-select-query-builder';
 import { type WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace-repository';
@@ -42,7 +44,7 @@ const NESTED_RELATION_QUERY_MAX_CONCURRENCY = 4;
 
 type ProcessNestedRelationsArgs<T extends ObjectRecord = ObjectRecord> = {
   flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-  flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+  flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
   parentObjectMetadataItem: FlatObjectMetadata;
   parentObjectRecords: T[];
   // oxlint-disable-next-line typescript/no-explicit-any
@@ -53,6 +55,7 @@ type ProcessNestedRelationsArgs<T extends ObjectRecord = ObjectRecord> = {
   authContext: WorkspaceAuthContext;
   useReplica?: boolean;
   rolePermissionConfig?: RolePermissionConfig;
+  repository?: WorkspaceRepository;
   // oxlint-disable-next-line typescript/no-explicit-any
   selectedFields: Record<string, any>;
 };
@@ -85,6 +88,7 @@ export class ProcessNestedRelationsHelper {
       authContext,
       useReplica = false,
       rolePermissionConfig,
+      repository,
       selectedFields,
     }: ProcessNestedRelationsArgs<T>,
     relationQueryLimiter: ConcurrencyLimiter,
@@ -104,6 +108,7 @@ export class ProcessNestedRelationsHelper {
           authContext,
           useReplica,
           rolePermissionConfig,
+          repository,
           relationQueryLimiter,
           selectedFields:
             selectedFields[sourceFieldName] instanceof Object
@@ -128,11 +133,12 @@ export class ProcessNestedRelationsHelper {
     authContext,
     useReplica,
     rolePermissionConfig,
+    repository,
     relationQueryLimiter,
     selectedFields,
   }: {
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     parentObjectMetadataItem: FlatObjectMetadata;
     parentObjectRecords: T[];
     // oxlint-disable-next-line typescript/no-explicit-any
@@ -144,6 +150,7 @@ export class ProcessNestedRelationsHelper {
     authContext: WorkspaceAuthContext;
     useReplica: boolean;
     rolePermissionConfig?: RolePermissionConfig;
+    repository?: WorkspaceRepository;
     relationQueryLimiter: ConcurrencyLimiter;
     selectedFields: Record<string, unknown>;
   }): Promise<void> {
@@ -192,13 +199,34 @@ export class ProcessNestedRelationsHelper {
         fieldMaps,
       });
 
-    const targetObjectRepository = this.workspaceOrmManager.getRepository(
-      targetObjectMetadata.nameSingular,
-      rolePermissionConfig,
-      { useReplica },
-    );
+    const targetObjectRepository = repository
+      ? repository.getRepositoryForObjectMetadataId(targetObjectMetadata.id)
+      : this.workspaceOrmManager.getRepository(
+          targetObjectMetadata.nameSingular,
+          rolePermissionConfig,
+          { useReplica },
+        );
 
     const targetObjectNameSingular = targetObjectMetadata.nameSingular;
+
+    // A joined relation to such records reads as empty, so a nested one does too instead of failing the parent
+    if (targetObjectRepository.isReadDeniedByReadability()) {
+      this.assignRelationResults({
+        parentRecords: parentObjectRecords,
+        parentObjectRecordsAggregatedValues,
+        relationResults: [],
+        relationAggregatedFieldsResult: {},
+        sourceFieldName,
+        relatedRecordJoinColumnName: 'id',
+        parentRecordJoinColumnName: computeMorphOrRelationFieldJoinColumnName({
+          name: sourceFieldName,
+        }),
+        relationType,
+        selectedFields,
+      });
+
+      return;
+    }
 
     let targetObjectQueryBuilder = targetObjectRepository.createQueryBuilder(
       targetObjectNameSingular,
@@ -279,11 +307,11 @@ export class ProcessNestedRelationsHelper {
       relationResults,
       relationAggregatedFieldsResult,
       sourceFieldName,
-      joinField:
+      relatedRecordJoinColumnName:
         relationType === RelationType.ONE_TO_MANY
           ? `${fieldMetadataTargetRelationColumnName}`
           : 'id',
-      joinColumnName,
+      parentRecordJoinColumnName: joinColumnName,
       relationType,
       selectedFields,
     });
@@ -305,6 +333,7 @@ export class ProcessNestedRelationsHelper {
           authContext,
           useReplica,
           rolePermissionConfig,
+          repository,
           selectedFields,
         },
         relationQueryLimiter,
@@ -320,7 +349,7 @@ export class ProcessNestedRelationsHelper {
     fieldMaps,
   }: {
     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
-    flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+    flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
     parentObjectMetadataItem: FlatObjectMetadata;
     sourceFieldName: string;
     fieldMaps: FieldMapsForObject;
@@ -516,8 +545,8 @@ export class ProcessNestedRelationsHelper {
     relationResults,
     relationAggregatedFieldsResult,
     sourceFieldName,
-    joinField,
-    joinColumnName,
+    relatedRecordJoinColumnName,
+    parentRecordJoinColumnName,
     relationType,
     selectedFields,
   }: {
@@ -529,37 +558,27 @@ export class ProcessNestedRelationsHelper {
     // oxlint-disable-next-line typescript/no-explicit-any
     relationAggregatedFieldsResult: Record<string, any>;
     sourceFieldName: string;
-    joinField: string;
-    joinColumnName: string;
+    relatedRecordJoinColumnName: string;
+    parentRecordJoinColumnName: string;
     relationType: RelationType;
     selectedFields: Record<string, unknown>;
   }): void {
-    parentRecords.forEach((item) => {
-      if (relationType === RelationType.ONE_TO_MANY) {
-        item[sourceFieldName] = relationResults.filter(
-          (rel) => rel[joinField] === item.id,
-        );
-      } else {
-        const matchedRelation = relationResults.find(
-          (rel) => rel.id === item[joinColumnName],
-        );
-
-        if (isDefined(matchedRelation?.deletedAt)) {
-          item[sourceFieldName] = null;
-          item[joinColumnName] = null;
-        } else if (isDefined(matchedRelation)) {
-          if (selectedFields?.deletedAt !== true) {
-            const { deletedAt: _, ...rest } = matchedRelation;
-
-            item[sourceFieldName] = rest;
-          } else {
-            item[sourceFieldName] = matchedRelation;
-          }
-        } else {
-          item[sourceFieldName] = null;
-        }
-      }
-    });
+    if (relationType === RelationType.ONE_TO_MANY) {
+      assignOneToManyRelationRecords({
+        parentRecords,
+        relationRecords: relationResults,
+        sourceFieldName,
+        relatedRecordJoinColumnName,
+      });
+    } else {
+      assignManyToOneRelationRecords({
+        parentRecords,
+        relationRecords: relationResults,
+        sourceFieldName,
+        parentRecordJoinColumnName,
+        selectedFields,
+      });
+    }
 
     parentObjectRecordsAggregatedValues[sourceFieldName] =
       relationAggregatedFieldsResult;

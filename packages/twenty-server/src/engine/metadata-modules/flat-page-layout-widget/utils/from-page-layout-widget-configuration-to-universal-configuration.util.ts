@@ -340,6 +340,22 @@ export const fromPageLayoutWidgetConfigurationToUniversalConfiguration = ({
       };
     }
 
+    case WidgetConfigurationType.FORM_FIELD: {
+      const { fieldMetadataId, configurationType } = configuration;
+
+      const fieldMetadataUniversalIdentifier =
+        getFieldMetadataUniversalIdentifier({
+          fieldMetadataId,
+          fieldMetadataUniversalIdentifierById,
+          shouldThrowOnMissingIdentifier,
+        });
+
+      return {
+        configurationType,
+        fieldMetadataId: fieldMetadataUniversalIdentifier ?? fieldMetadataId,
+      };
+    }
+
     case WidgetConfigurationType.FIELD: {
       const {
         fieldMetadataId,
@@ -347,6 +363,7 @@ export const fromPageLayoutWidgetConfigurationToUniversalConfiguration = ({
         configurationType,
         viewId,
         nestedRelationFieldMetadataId,
+        isUIEditable,
       } = configuration;
 
       const fieldMetadataUniversalIdentifier =
@@ -394,6 +411,7 @@ export const fromPageLayoutWidgetConfigurationToUniversalConfiguration = ({
                 nestedRelationFieldMetadataUniversalIdentifier,
             }
           : {}),
+        ...(isDefined(isUIEditable) ? { isUIEditable } : {}),
       };
     }
 
@@ -413,6 +431,8 @@ export const fromPageLayoutWidgetConfigurationToUniversalConfiguration = ({
     case WidgetConfigurationType.EMAIL_THREAD:
     case WidgetConfigurationType.CALL_RECORDING_SUMMARY:
     case WidgetConfigurationType.CALL_RECORDING_TRANSCRIPT:
+    case WidgetConfigurationType.CHAT_THREADS:
+    case WidgetConfigurationType.CHAT:
     case WidgetConfigurationType.MESSAGE_CAMPAIGN_BODY:
     case WidgetConfigurationType.MESSAGE_CAMPAIGN_DETAILS:
       return configuration;

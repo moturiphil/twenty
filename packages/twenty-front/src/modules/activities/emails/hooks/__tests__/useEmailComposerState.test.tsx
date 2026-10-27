@@ -5,14 +5,11 @@ import { type ReactNode } from 'react';
 import { SEND_EMAIL } from '@/activities/emails/graphql/mutations/sendEmail';
 import { useEmailComposerState } from '@/activities/emails/hooks/useEmailComposerState';
 
-const mockEnqueueSuccessSnackBar = jest.fn();
-const mockEnqueueErrorSnackBar = jest.fn();
+const mockEnqueueToast = jest.fn();
 
-jest.mock('@/ui/feedback/snack-bar-manager/hooks/useSnackBar', () => ({
-  useSnackBar: () => ({
-    enqueueSuccessSnackBar: mockEnqueueSuccessSnackBar,
-    enqueueErrorSnackBar: mockEnqueueErrorSnackBar,
-  }),
+jest.mock('twenty-ui/components/feedback', () => ({
+  ...jest.requireActual('twenty-ui/components/feedback'),
+  useToast: () => ({ enqueueToast: mockEnqueueToast }),
 }));
 
 jest.mock('@/object-metadata/hooks/useApolloCoreClient', () => ({
@@ -22,6 +19,7 @@ jest.mock('@/object-metadata/hooks/useApolloCoreClient', () => ({
 const createSendEmailMock = (input: {
   connectedAccountId: string;
   fromHandle?: string;
+  targetRecord?: { objectNameSingular: string; recordId: string };
 }) => ({
   request: {
     query: SEND_EMAIL,
@@ -35,6 +33,7 @@ const createSendEmailMock = (input: {
         inReplyTo: undefined,
         draftMessageId: undefined,
         files: undefined,
+        targetRecord: undefined,
         ...input,
       },
     },
@@ -50,16 +49,22 @@ const createSendEmailMock = (input: {
   },
 });
 
-const renderComposerState = (
-  mocks: ReturnType<typeof createSendEmailMock>[],
-  onSent: (messageThreadId: string | null) => void,
-) =>
+const renderComposerState = ({
+  mocks,
+  onSent,
+  contextRecord,
+}: {
+  mocks: ReturnType<typeof createSendEmailMock>[];
+  onSent: (messageThreadId: string | null) => void;
+  contextRecord?: { objectNameSingular: string; recordId: string };
+}) =>
   renderHook(
     () =>
       useEmailComposerState({
         connectedAccountId: 'account-1',
         defaultTo: 'ada@lovelace.com',
         defaultSubject: 'Hello',
+        contextRecord,
         onSent,
       }),
     {
@@ -77,15 +82,15 @@ describe('useEmailComposerState', () => {
   it('sends from the connected account when no alias was picked', async () => {
     const onSent = jest.fn();
 
-    const { result } = renderComposerState(
-      [
+    const { result } = renderComposerState({
+      mocks: [
         createSendEmailMock({
           connectedAccountId: 'account-1',
           fromHandle: undefined,
         }),
       ],
       onSent,
-    );
+    });
 
     await act(async () => {
       await result.current.handleSend();
@@ -97,15 +102,15 @@ describe('useEmailComposerState', () => {
   it('sends from the picked alias together with the account owning it', async () => {
     const onSent = jest.fn();
 
-    const { result } = renderComposerState(
-      [
+    const { result } = renderComposerState({
+      mocks: [
         createSendEmailMock({
           connectedAccountId: 'account-2',
           fromHandle: 'sales@twenty.com',
         }),
       ],
       onSent,
-    );
+    });
 
     act(() => {
       result.current.setSender({
@@ -119,7 +124,35 @@ describe('useEmailComposerState', () => {
     });
 
     expect(onSent).toHaveBeenCalledWith('message-thread-1');
-    expect(mockEnqueueErrorSnackBar).not.toHaveBeenCalled();
+    expect(mockEnqueueToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'error' }),
+    );
+  });
+
+  it('sends the record the composer was opened from so the thread gets linked to it', async () => {
+    const onSent = jest.fn();
+    const contextRecord = {
+      objectNameSingular: 'opportunity',
+      recordId: 'opportunity-1',
+    };
+
+    const { result } = renderComposerState({
+      mocks: [
+        createSendEmailMock({
+          connectedAccountId: 'account-1',
+          fromHandle: undefined,
+          targetRecord: contextRecord,
+        }),
+      ],
+      onSent,
+      contextRecord,
+    });
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(onSent).toHaveBeenCalledWith('message-thread-1');
   });
 
   it('drops a picked alias when the reply moves to another account', () => {

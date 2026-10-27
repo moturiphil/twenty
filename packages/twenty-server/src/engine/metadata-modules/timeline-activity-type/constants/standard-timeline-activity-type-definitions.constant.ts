@@ -18,6 +18,7 @@ type StandardTimelineActivityTypeDefinitionSource = {
     through?: {
       relationFieldUniversalIdentifier: string;
       triggerFieldUniversalIdentifiers?: string[];
+      happensAtFieldUniversalIdentifier?: string;
     };
   };
 };
@@ -28,10 +29,10 @@ export type StandardTimelineActivityTypeDefinition =
     objectUniversalIdentifier: string | null;
     targetRelationFieldUniversalIdentifier?: string;
     triggerFieldUniversalIdentifiers?: string[];
+    happensAtFieldUniversalIdentifier?: string;
   };
 
-// Standard wildcard emitters supply platform fallbacks when no object-specific
-// type owns the slot. Application manifests require an object on every emitter.
+// Wildcard emitters are standard-only fallbacks; application manifests require an object on every emitter
 const STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITION_SOURCES: StandardTimelineActivityTypeDefinitionSource[] =
   [
     {
@@ -231,6 +232,8 @@ const STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITION_SOURCES: StandardTimelineActivi
           relationFieldUniversalIdentifier:
             STANDARD_OBJECTS.message.fields.messageParticipants
               .universalIdentifier,
+          happensAtFieldUniversalIdentifier:
+            STANDARD_OBJECTS.message.fields.receivedAt.universalIdentifier,
         },
       },
     },
@@ -252,6 +255,8 @@ const STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITION_SOURCES: StandardTimelineActivi
           relationFieldUniversalIdentifier:
             STANDARD_OBJECTS.calendarEvent.fields.calendarEventParticipants
               .universalIdentifier,
+          happensAtFieldUniversalIdentifier:
+            STANDARD_OBJECTS.calendarEvent.fields.startsAt.universalIdentifier,
         },
       },
     },
@@ -295,8 +300,7 @@ const STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITION_SOURCES: StandardTimelineActivi
     },
   ];
 
-// The normalized properties keep the committed 2.34 workspace command stable;
-// current builders and app declarations read the nested emit contract.
+// Normalized properties keep the committed 2.34 upgrade command stable
 export const STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITIONS: StandardTimelineActivityTypeDefinition[] =
   STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITION_SOURCES.map((definition) => ({
     ...definition,
@@ -306,4 +310,6 @@ export const STANDARD_TIMELINE_ACTIVITY_TYPE_DEFINITIONS: StandardTimelineActivi
       definition.emit.through?.relationFieldUniversalIdentifier,
     triggerFieldUniversalIdentifiers:
       definition.emit.through?.triggerFieldUniversalIdentifiers,
+    happensAtFieldUniversalIdentifier:
+      definition.emit.through?.happensAtFieldUniversalIdentifier,
   }));

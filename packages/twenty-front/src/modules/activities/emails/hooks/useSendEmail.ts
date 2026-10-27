@@ -3,10 +3,11 @@ import { useCallback } from 'react';
 import { type EmailAttachment } from 'twenty-shared/types';
 
 import { SEND_EMAIL } from '@/activities/emails/graphql/mutations/sendEmail';
+import { type EmailComposerContextRecord } from '@/activities/emails/recipients/types/EmailComposerContextRecord';
 import { getTimelineThreadsFromObjectRecord } from '@/activities/emails/graphql/queries/getTimelineThreadsFromObjectRecord';
 import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { t } from '@lingui/core/macro';
+import { useToast } from 'twenty-ui/components/feedback';
 import {
   type SendEmailMutation,
   type SendEmailMutationVariables,
@@ -28,6 +29,7 @@ type SendEmailParams = {
   inReplyTo?: string;
   draftMessageId?: string;
   files?: EmailAttachment[];
+  targetRecord?: EmailComposerContextRecord;
 };
 
 export const useSendEmail = () => {
@@ -38,7 +40,7 @@ export const useSendEmail = () => {
     SendEmailMutationVariables
   >(SEND_EMAIL);
 
-  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
 
   const sendEmail = useCallback(
     async (params: SendEmailParams): Promise<SendEmailResult> => {
@@ -56,13 +58,15 @@ export const useSendEmail = () => {
               inReplyTo: params.inReplyTo,
               draftMessageId: params.draftMessageId,
               files: params.files,
+              targetRecord: params.targetRecord,
             },
           },
         });
 
         if (result.data?.sendEmail.success) {
-          enqueueSuccessSnackBar({
-            message: t`Email sent successfully`,
+          enqueueToast({
+            status: 'success',
+            children: t`Email sent successfully`,
           });
 
           await apolloCoreClient.refetchQueries({
@@ -80,25 +84,19 @@ export const useSendEmail = () => {
           };
         }
 
-        enqueueErrorSnackBar({
-          message: result.data?.sendEmail.error ?? t`Failed to send email`,
+        enqueueToast({
+          status: 'error',
+          children: result.data?.sendEmail.error ?? t`Failed to send email`,
         });
 
         return { success: false, messageThreadId: null };
       } catch {
-        enqueueErrorSnackBar({
-          message: t`Failed to send email`,
-        });
+        enqueueToast({ status: 'error', children: t`Failed to send email` });
 
         return { success: false, messageThreadId: null };
       }
     },
-    [
-      sendEmailMutation,
-      enqueueSuccessSnackBar,
-      enqueueErrorSnackBar,
-      apolloCoreClient,
-    ],
+    [sendEmailMutation, enqueueToast, apolloCoreClient],
   );
 
   return { sendEmail, loading };

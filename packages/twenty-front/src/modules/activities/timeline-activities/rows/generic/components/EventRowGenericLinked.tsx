@@ -6,31 +6,23 @@ import { EventCardToggleButton } from '@/activities/timeline-activities/rows/com
 import { EventRowDate } from '@/activities/timeline-activities/rows/components/EventRowDate';
 import { type EventRowNativeComponentProps } from '@/activities/timeline-activities/rows/components/EventRowDynamicComponent.types';
 import { EventRowItem } from '@/activities/timeline-activities/rows/components/EventRowItem';
-import { getAuthorizedLinkedRecordName } from '@/activities/timeline-activities/rows/generic/utils/getAuthorizedLinkedRecordName';
 import {
+  StyledEventRow,
   StyledEventRowContainer,
   StyledEventRowContent,
   StyledEventRowLinkedRecord,
 } from '@/activities/timeline-activities/rows/components/EventRowStyles';
-import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
-import { isDefined } from 'twenty-shared/utils';
-import { OverflowingTextWithTooltip } from 'twenty-ui/surfaces';
-import { SidePanelSearchRecordPreviewCard } from '@/side-panel/pages/search/components/SidePanelSearchRecordPreviewCard';
 import { allowRequestsToTwentyIconsState } from '@/client-config/states/allowRequestsToTwentyIcons';
 import { recordStoreIdentifierFamilySelector } from '@/object-record/record-store/states/selectors/recordStoreIdentifierFamilySelector';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
+import { SidePanelSearchRecordPreviewCard } from '@/side-panel/pages/search/components/SidePanelSearchRecordPreviewCard';
 import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
-import { styled } from '@linaria/react';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { isNonEmptyString } from '@sniptt/guards';
+import { isDefined } from 'twenty-shared/utils';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
 
 type EventRowGenericLinkedProps = EventRowNativeComponentProps;
-
-const StyledGenericLinkedContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[1]};
-  width: 100%;
-`;
 
 export const EventRowGenericLinked = ({
   event,
@@ -57,9 +49,7 @@ export const EventRowGenericLinked = ({
   const objectLabel =
     linkedObjectMetadataItem?.labelSingular?.toLowerCase() ?? t`record`;
 
-  const linkedRecordName = getAuthorizedLinkedRecordName(
-    linkedRecordIdentifier?.name,
-  );
+  const linkedRecordName = linkedRecordIdentifier?.name;
 
   const linkedRecord =
     isDefined(event.linkedRecordId) &&
@@ -73,7 +63,7 @@ export const EventRowGenericLinked = ({
   const canOpen =
     hasRenderer !== true &&
     isDefined(linkedRecord) &&
-    isDefined(linkedRecordName);
+    isNonEmptyString(linkedRecordName);
 
   const handleOpen = () => {
     if (!isDefined(linkedRecord)) {
@@ -94,7 +84,7 @@ export const EventRowGenericLinked = ({
   };
 
   return (
-    <StyledGenericLinkedContainer>
+    <StyledEventRow>
       <StyledEventRowContainer>
         <StyledEventRowContent>
           <EventRowItem>{authorFullName}</EventRowItem>
@@ -126,6 +116,6 @@ export const EventRowGenericLinked = ({
           />
         </EventCard>
       )}
-    </StyledGenericLinkedContainer>
+    </StyledEventRow>
   );
 };

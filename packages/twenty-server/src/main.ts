@@ -13,11 +13,13 @@ import { ApiPath } from 'twenty-shared/types';
 import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
 
 import { setPgDateTypeParser } from 'src/database/pg/set-pg-date-type-parser';
+import { ApplicationRepeatedEventRecorderService } from 'src/engine/core-modules/event-logs/emit/application-repeated-event-recorder.service';
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { LoggerService } from 'src/engine/core-modules/logger/logger.service';
 import { getSessionStorageOptions } from 'src/engine/core-modules/session-storage/session-storage.module-factory';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { configTransformers } from 'src/engine/core-modules/twenty-config/utils/config-transformers.util';
+import { UsageRecorderService } from 'src/engine/core-modules/usage/services/usage-recorder.service';
 import { applyCredentialedCors } from 'src/engine/core-modules/user-session/utils/apply-credentialed-cors.util';
 import { shouldCaptureException } from 'src/engine/utils/global-exception-handler.util';
 
@@ -26,7 +28,6 @@ import './instrument';
 
 import { settings } from './engine/constants/settings';
 import { enableValidationMetadataCache } from './utils/enable-validation-metadata-cache.util';
-import { generateFrontConfig } from './utils/generate-front-config';
 
 const bootstrap = async () => {
   enableValidationMetadataCache();
@@ -71,14 +72,13 @@ const bootstrap = async () => {
 
   app.use(session(getSessionStorageOptions(twentyConfigService)));
 
-  // Apply class-validator container so that we can use injection in validators
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
 
   app.useLogger(logger);
 
-  app.useBodyParser('json', { limit: settings.storage.maxFileSize });
+  app.useBodyParser('json', { limit: settings.maxRequestBodySize });
   app.useBodyParser('urlencoded', {
-    limit: settings.storage.maxFileSize,
+    limit: settings.maxRequestBodySize,
     extended: true,
   });
   app.useBodyParser('text', { type: 'text/plain', limit: '1024kb' });
@@ -86,7 +86,8 @@ const bootstrap = async () => {
   app.use(
     `/${ApiPath.GraphQL}`,
     graphqlUploadExpress({
-      maxFieldSize: bytes(settings.storage.maxFileSize)!,
+      maxFieldSize: bytes(settings.maxRequestBodySize)!,
+      maxFileSize: bytes(settings.maxRequestBodySize)!,
       maxFiles: 10,
     }),
   );
@@ -94,12 +95,11 @@ const bootstrap = async () => {
   app.use(
     `/${ApiPath.Metadata}`,
     graphqlUploadExpress({
-      maxFieldSize: bytes(settings.storage.maxFileSize)!,
+      maxFieldSize: bytes(settings.maxRequestBodySize)!,
+      maxFileSize: bytes(settings.maxRequestBodySize)!,
       maxFiles: 10,
     }),
   );
-
-  generateFrontConfig();
 
   const keepAliveTimeout = twentyConfigService.get(
     'SERVER_KEEP_ALIVE_TIMEOUT_MS',
@@ -108,6 +108,20 @@ const bootstrap = async () => {
 
   httpServer.keepAliveTimeout = keepAliveTimeout;
   httpServer.headersTimeout = keepAliveTimeout + 1000;
+
+  const usageRecorder = app.get(UsageRecorderService);
+  const applicationRepeatedEventRecorder = app.get(
+    ApplicationRepeatedEventRecorderService,
+  );
+
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      void Promise.allSettled([
+        usageRecorder.flushAndStop(),
+        applicationRepeatedEventRecorder.flushAndStop(),
+      ]).finally(() => process.exit(0));
+    });
+  }
 
   await app.listen(twentyConfigService.get('NODE_PORT'));
 };
